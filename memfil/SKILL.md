@@ -1,49 +1,129 @@
 ---
-name: memex-cli
-description: Upload and download files on Filecoin via the Synapse SDK. Use when working with this CLI project or when the user wants to store or retrieve files on Filecoin decentralized storage (Calibration testnet by default).
-trigger: when user says "export memory to filecoin", "publish to marketplace"
+name: memfil
+description: Use this skill to export the current session memory as a structured markdown file and permanently store it on Filecoin via the memfil CLI. Trigger when the user says "export memory", "save session to Filecoin", "publish to marketplace", "persist this conversation", or similar.
 ---
 
-# memex-cli (Filecoin Synapse CLI)
+# Memfil — Export Session Memory to Filecoin
 
-This skill covers the Filecoin Synapse CLI: upload and download files on Filecoin via the [@filoz/synapse-sdk](https://github.com/FilOzone/synapse-sdk). Targets **Calibration testnet** by default. Configure `.env` (see `.env.example`); required: `WALLET_PRIVATE_KEY`. Prerequisites: tFIL for gas, USDFC for storage, and a deposit to the Synapse payments contract.
+## What This Skill Does
 
----
+When triggered, you (the AI agent) must:
 
-## Scripts
+1. **Export** the current session's key context — decisions, artifacts, code, discoveries, and outcomes — into a structured markdown file called an **episode**.
+2. **Upload** that file to Filecoin permanent storage using the memfil CLI, which returns a PieceCID.
+3. **Report** the CID back to the user so the memory is verifiable and retrievable forever.
 
-### `build`
+## Step 1 — Write the Episode File
 
-- **What it does:** Compiles TypeScript to `dist/`. Produces `dist/index.js` and command modules so the CLI can be run with `node`.
-- **How to run:** `pnpm build` or `npm run build` from the project root.
-- **When:** Before running the CLI with `node` or before distributing the binary. Not needed when using `pnpm dev` or `pnpm upload` / `pnpm download`.
+Create a markdown file in the `memfil/` directory. Use this structure:
 
-### `dev`
+```markdown
+# <Short title summarizing the session>
 
-- **What it does:** Runs the CLI in development mode with `tsx` (no compilation). With no arguments it prints help and available commands (`upload`, `download`). Pass a subcommand and args to run that command.
-- **How to run:** `pnpm dev` (help only), or `pnpm dev -- upload <file>` / `pnpm dev -- download <pieceCid> [options]`.
-- **When:** During development or when you want to run the CLI without building. Use `dev -- upload` or `dev -- download` to actually upload or download.
+## Context
+<What the user asked for. The starting goal.>
 
-### `upload`
+## Decisions
+<Key choices made during the session and why.>
 
-- **What it does:** Uploads a single file to Filecoin decentralized storage via the Synapse SDK. Reads the file, shows progress, and prints the PieceCID on success. Optionally writes the PieceCID (and metadata) to a JSON file.
-- **How to run:** `pnpm upload -- <path/to/file>` or `pnpm dev -- upload <path/to/file>`. Optional: `--output <path>` or `-o <path>` to save the result to a JSON file (e.g. `pnpm upload -- ./data.csv -o ./cid.json`).
-- **When:** When the user wants to store a file on Filecoin, persist a CID for later use, or automate uploads from scripts. Requires a funded wallet and Synapse contract deposit.
+## Artifacts
+<Code snippets, configs, commands, or files produced. Use fenced code blocks.>
 
-### `download`
+## Outcome
+<What was achieved. Final state.>
 
-- **What it does:** Downloads a file from Filecoin by its PieceCID. Fetches the content, verifies it against the CID, and writes it to disk. Uses CDN if enabled in config.
-- **How to run:** `pnpm download -- <pieceCid>` or `pnpm dev -- download <pieceCid>`. Optional: `--out <path>` to set the output file (default: `./download-<cid>.bin`). Example: `pnpm download -- baga6ea4seaq... --out ./downloads/file.jpg`.
-- **When:** When the user has a PieceCID and wants to retrieve the file, verify integrity, or save it to a specific path.
+## Metadata
+- **Date**: <YYYY-MM-DD>
+- **Tags**: <comma-separated: e.g. coding, reasoning, planning>
+- **Agent**: <your name or "openclaw">
+```
 
-### `start`
+Write the file to `memfil/` with a descriptive filename:
 
-- **What it does:** Runs the compiled CLI from `dist/index.js` with Node. With no arguments it prints help. Pass a subcommand and args to run that command (same as running `node dist/index.js <command> [args]`).
-- **How to run:** `pnpm start` (help only), or `pnpm start -- upload <file>` / `pnpm start -- download <pieceCid> [options]`. Requires `pnpm build` first.
-- **When:** When you want to run the built CLI (e.g. in production or without tsx). Use `start -- upload` or `start -- download` to perform uploads or downloads.
+```bash
+# Example path — use a slug that describes the session
+memfil/debug-auth-flow.md
+memfil/refactor-database-layer.md
+```
 
----
+Rules for writing the episode:
+- Be concise but complete. Another agent should be able to reconstruct the session from this file alone.
+- Include actual code/commands in fenced blocks, not summaries of them.
+- Tags should use the episode taxonomy: `reasoning`, `memory`, `coding`, `vision`, `planning`, `tool-use`.
+- Do NOT include secrets, API keys, or credentials.
 
-## Binary
+## Step 2 — Upload to Filecoin
 
-The package exposes a bin: **`synapse-cli`**. After `pnpm build`, run `node dist/index.js` or install the package and invoke `synapse-cli` from the shell. Same commands and options as above (`upload <file>`, `download <pieceCid> --out <path>`).
+Run the upload command from the `memfil/` directory. The CLI requires `.env` to be configured with `WALLET_PRIVATE_KEY` (see `env.example`).
+
+```bash
+cd memfil && pnpm upload -- ./<episode-filename>.md -o ./cid.json
+```
+
+This will:
+- Upload the file to Filecoin (Calibration testnet) via the Synapse SDK.
+- Print the **PieceCID** on success.
+- Save the CID and metadata to `cid.json` (via the `-o` flag).
+
+If the upload fails, check:
+- `.env` has a valid `WALLET_PRIVATE_KEY`.
+- The wallet is funded with tFIL (gas) and USDFC (storage).
+- USDFC is deposited into the Synapse payments contract.
+
+## Step 3 — Report Back to the User
+
+After a successful upload, tell the user:
+
+1. The **PieceCID** (the permanent Filecoin address of their memory).
+2. The **download command** to retrieve it later:
+
+```bash
+cd memfil && pnpm download -- <pieceCid> --out ./downloads/<filename>.md
+```
+
+3. That the episode is permanently stored and CID-verifiable on Filecoin.
+
+## Full Example
+
+Suppose the user says: *"Export this session to Filecoin."*
+
+1. Write the episode:
+
+```bash
+# You create memfil/setup-episodemarket.md with the session content
+```
+
+2. Upload it:
+
+```bash
+cd memfil && pnpm upload -- ./setup-episodemarket.md -o ./cid.json
+```
+
+3. Output to user:
+
+> Session exported to Filecoin.
+>
+> **PieceCID**: `bafkzcibd24cqmbnc5qhh5gttjomk5xrte4d3mfiznhkbgkcvz4bs46h6arc4r7aw`
+>
+> Retrieve it anytime:
+> ```
+> cd memfil && pnpm download -- bafkzcibd24c... --out ./downloads/setup-episodemarket.md
+> ```
+
+## Prerequisites
+
+The memfil CLI must be set up before this skill works:
+
+1. `cd memfil && npm install` (or `pnpm install`).
+2. Copy `env.example` to `.env` and set `WALLET_PRIVATE_KEY`.
+3. Fund the wallet with **tFIL** (gas) from https://faucet.calibnet.chainsafe-fil.io.
+4. Fund with **USDFC** (storage) from the calibration faucet.
+5. Deposit USDFC to the Synapse payments contract via https://fs-upload-dapp.netlify.app.
+
+## Quick Reference
+
+| Step | What to do | Command |
+|------|-----------|---------|
+| Write episode | Create a structured `.md` file in `memfil/` | (use your file-writing tools) |
+| Upload | Send the file to Filecoin | `cd memfil && pnpm upload -- ./<file>.md -o ./cid.json` |
+| Download (verify) | Retrieve by CID | `cd memfil && pnpm download -- <pieceCid> --out ./downloads/<file>.md` |
