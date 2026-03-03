@@ -39,6 +39,7 @@ export function AgentsPageClient({
   const [protocol, setProtocol] = useState<ProtocolFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [network, setNetwork] = useState<NetworkId>(initialNetwork);
+  const [showIncompleteAgents, setShowIncompleteAgents] = useState(false);
   const [currentPage, setCurrentPage] = useState(initialData.page);
   const [hasMore, setHasMore] = useState(initialData.hasMore);
   const [total, setTotal] = useState(initialData.total);
@@ -127,6 +128,12 @@ export function AgentsPageClient({
   const showSkeleton = isLoading;
   const showContent = !isLoading && !error;
 
+  const hasImageAndMetadata = (a: RegistryAgent) =>
+    !!a.metadata && !!a.metadata.image;
+  const displayedAgents = showIncompleteAgents
+    ? agents
+    : agents.filter(hasImageAndMetadata);
+
   return (
     <WorkspaceLayout
       sidebar={
@@ -138,6 +145,8 @@ export function AgentsPageClient({
           network={network}
           onNetworkChange={handleNetworkChange}
           networks={NETWORK_OPTIONS}
+          showIncompleteAgents={showIncompleteAgents}
+          onShowIncompleteAgentsChange={setShowIncompleteAgents}
         />
       }
     >
@@ -201,13 +210,13 @@ export function AgentsPageClient({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
+              className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
             >
               {Array.from({ length: PAGE_SIZE }).map((_, i) => (
                 <AgentCardSkeleton key={i} />
               ))}
             </motion.div>
-          ) : agents.length === 0 ? (
+          ) : displayedAgents.length === 0 ? (
             <motion.div
               key="empty"
               initial={{ opacity: 0 }}
@@ -215,13 +224,17 @@ export function AgentsPageClient({
               exit={{ opacity: 0 }}
               className="rounded-xl border border-dashed border-border bg-muted/30 py-16 text-center"
             >
-              <p className="text-muted-foreground">No agents found.</p>
+              <p className="text-muted-foreground">
+                {!showIncompleteAgents && agents.length > 0
+                  ? "No agents with image and metadata. Enable “Show agents without image or metadata” to see all."
+                  : "No agents found."}
+              </p>
             </motion.div>
           ) : (
             <motion.div
               key="grid"
               layout
-              className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
+              className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
               initial="hidden"
               animate="visible"
               variants={{
@@ -230,7 +243,7 @@ export function AgentsPageClient({
               }}
             >
               <AnimatePresence mode="popLayout">
-                {agents.map((agent) => (
+                {displayedAgents.map((agent) => (
                   <motion.div
                     key={agent.id}
                     layout
@@ -249,10 +262,15 @@ export function AgentsPageClient({
         </AnimatePresence>
 
         {/* Pagination */}
-        {showContent && agents.length > 0 && (
+        {showContent && displayedAgents.length > 0 && (
           <div className="flex items-center justify-between pt-2">
             <p className="text-sm text-muted-foreground">
-              Page {currentPage} · {agents.length} of {total}
+              Page {currentPage} · {displayedAgents.length} of {total}
+              {!showIncompleteAgents && agents.length > displayedAgents.length && (
+                <span className="ml-1 font-medium">
+                  ({agents.length - displayedAgents.length} hidden)
+                </span>
+              )}
             </p>
             <div className="flex items-center gap-2">
               <Button
