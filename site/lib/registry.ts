@@ -17,17 +17,36 @@ const REPUTATION_ABI = parseAbi([
   "function getSummary(uint256 agentId, address[] clientAddresses, string tag1, string tag2) view returns (uint64 count, int128 summaryValue, uint8 summaryValueDecimals)",
 ]);
 
+/** ERC-8004 registration-v1: endpoint entry in the endpoints array */
+export interface AgentEndpointEntry {
+  name: string;
+  endpoint: string;
+  version?: string;
+  capabilities?: {
+    tools?: Array<{ name: string; description?: string }>;
+  };
+}
+
 export interface AgentMetadata {
   name?: string;
   description?: string;
   image?: string;
   active?: boolean;
   x402Support?: boolean;
+  /** ERC-8004: supportedTrust (array in spec) */
   supportedTrusts?: string[];
+  supportedTrust?: string[];
+  /** ERC-8004 registration-v1: endpoints array; MCP/A2A URLs also normalized to mcpEndpoint/a2aEndpoint */
+  endpoints?: AgentEndpointEntry[];
+  /** Alternate key used by some agents (e.g. ScoutScore) for the same shape as endpoints */
+  services?: AgentEndpointEntry[];
+  /** Flat form (legacy or from subgraph); also set by normalizer when parsing endpoints[] or services[] */
   mcpEndpoint?: string;
   mcpTools?: string[];
   a2aEndpoint?: string;
   a2aSkills?: string[];
+  /** Payment recipient from agentWallet endpoint; used as x402 payTo when present */
+  sellerWallet?: string;
 }
 
 export interface RegistryAgent {
@@ -130,6 +149,12 @@ async function getLogsChunked(
 
 // --- Metadata helpers -------------------------------------------------------
 
+const IPFS_GATEWAYS = [
+  "https://ipfs.io/ipfs/",
+  "https://dweb.link/ipfs/",
+  "https://cloudflare-ipfs.com/ipfs/",
+];
+
 function resolveURI(uri: string): string {
   if (uri.startsWith("ipfs://")) {
     return uri.replace("ipfs://", "https://ipfs.io/ipfs/");
@@ -137,12 +162,75 @@ function resolveURI(uri: string): string {
   return uri;
 }
 
+/**
+ * Fetch JSON from IPFS by trying multiple gateways; returns null if all fail.
+ */
+async function fetchFromIPFSGateways(cid: string): Promise<unknown> {
+  for (const base of IPFS_GATEWAYS) {
+    try {
+      const res = await fetch(`${base}${cid}`, {
+        next: { revalidate: 3600 },
+        signal: AbortSignal.timeout(15000),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+/**
+ * Normalize ERC-8004 registration-v1 metadata: fill mcpEndpoint, a2aEndpoint, mcpTools, a2aSkills
+ * from the endpoints or services array when present so the rest of the app can use the flat shape.
+ * Supports both "endpoints" (ERC-8004) and "services" (e.g. ScoutScore) keys.
+ */
+function normalizeAgentMetadata(meta: AgentMetadata): AgentMetadata {
+  const entries = Array.isArray(meta.endpoints)
+    ? meta.endpoints
+    : Array.isArray(meta.services)
+      ? meta.services
+      : [];
+  if (entries.length === 0) return meta;
+  const out = { ...meta };
+  for (const entry of entries) {
+    if (entry.name === "MCP" && entry.endpoint) {
+      out.mcpEndpoint = entry.endpoint;
+      if (entry.capabilities?.tools?.length) {
+        out.mcpTools = entry.capabilities.tools.map((t) => t.name);
+      }
+    } else if (entry.name === "A2A" && entry.endpoint) {
+      out.a2aEndpoint = entry.endpoint;
+    } else if (entry.name === "agentWallet" && entry.endpoint) {
+      const parts = entry.endpoint.split(":");
+      out.sellerWallet = parts.length === 3 ? parts[2] : entry.endpoint;
+    }
+  }
+  if (meta.supportedTrust && Array.isArray(meta.supportedTrust) && !out.supportedTrusts) {
+    out.supportedTrusts = meta.supportedTrust;
+  }
+  return out;
+}
+
 async function fetchMetadata(uri: string): Promise<AgentMetadata | null> {
   if (!uri) return null;
   try {
-    const res = await fetch(resolveURI(uri), { next: { revalidate: 3600 } });
-    if (!res.ok) return null;
-    return (await res.json()) as AgentMetadata;
+    let raw: unknown;
+    if (uri.startsWith("ipfs://")) {
+      const cid = uri.slice("ipfs://".length).trim();
+      raw = await fetchFromIPFSGateways(cid);
+    } else {
+      const res = await fetch(resolveURI(uri), {
+        next: { revalidate: 3600 },
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) return null;
+      raw = await res.json();
+    }
+    if (raw == null || typeof raw !== "object") return null;
+    return normalizeAgentMetadata(raw as AgentMetadata);
   } catch {
     return null;
   }
@@ -377,4 +465,34 @@ export async function fetchAgentById(
     console.error(`fetchAgentById(${agentId}, ${networkId}) failed:`, e);
     return null;
   }
+}
+
+export interface AgentOwnerAndEndpoint {
+  owner: string;
+  mcpEndpoint?: string;
+  a2aEndpoint?: string;
+  name?: string;
+  sellerWallet?: string;
+  /** Resolved tokenURI (e.g. ipfs://...) for debugging when metadata has no endpoint */
+  agentURI?: string;
+}
+
+/**
+ * Lightweight lookup for x402 payment flow. Returns owner (payTo) and callable endpoints.
+ * Uses fetchAgentById under the hood; extracts only the fields needed for payment and proxying.
+ */
+export async function fetchAgentOwnerAndEndpoint(
+  agentId: string,
+  networkId: NetworkId
+): Promise<AgentOwnerAndEndpoint | null> {
+  const agent = await fetchAgentById(agentId, networkId);
+  if (!agent) return null;
+  return {
+    owner: agent.owner,
+    mcpEndpoint: agent.metadata?.mcpEndpoint,
+    a2aEndpoint: agent.metadata?.a2aEndpoint,
+    name: agent.metadata?.name,
+    sellerWallet: agent.metadata?.sellerWallet,
+    agentURI: agent.agentURI,
+  };
 }

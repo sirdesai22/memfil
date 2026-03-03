@@ -2,23 +2,48 @@ import fs from 'fs'
 import path from 'path'
 import chalk from 'chalk'
 import ora from 'ora'
-import { loadConfig, createSynapse } from '../utils/client.js'
+
+const IPFS_GATEWAYS = [
+  'https://ipfs.io/ipfs/',
+  'https://dweb.link/ipfs/',
+  'https://cloudflare-ipfs.com/ipfs/',
+]
 
 export interface DownloadOptions {
-  out?: string   // output file path
+  out?: string
 }
 
-export async function downloadCommand(pieceCid: string, options: DownloadOptions): Promise<void> {
-  if (!pieceCid || pieceCid.trim() === '') {
-    console.error(chalk.red('✗ PieceCID is required.'))
+async function fetchFromGateways(cid: string): Promise<ArrayBuffer> {
+  const errors: Error[] = []
+  for (const base of IPFS_GATEWAYS) {
+    const url = `${base}${cid}`
+    try {
+      const res = await fetch(url)
+      if (res.ok) {
+        return await res.arrayBuffer()
+      }
+      throw new Error(`HTTP ${res.status}`)
+    } catch (err) {
+      errors.push(err instanceof Error ? err : new Error(String(err)))
+    }
+  }
+  throw new Error(
+    `Failed to fetch from all gateways: ${errors.map((e) => e.message).join('; ')}`
+  )
+}
+
+export async function downloadCommand(
+  cid: string,
+  options: DownloadOptions
+): Promise<void> {
+  if (!cid || cid.trim() === '') {
+    console.error(chalk.red('✗ CID is required.'))
     process.exit(1)
   }
 
-  // Determine output path
-  const outFileName = options.out ?? `download-${pieceCid.slice(0, 12)}.bin`
+  const outFileName = options.out ?? `download-${cid.slice(0, 12)}.bin`
   const outPath = path.resolve(outFileName)
 
-  // Ensure output directory exists
   const outDir = path.dirname(outPath)
   if (!fs.existsSync(outDir)) {
     fs.mkdirSync(outDir, { recursive: true })
@@ -26,34 +51,26 @@ export async function downloadCommand(pieceCid: string, options: DownloadOptions
 
   console.log(chalk.bold('\n📥  Filecoin Download'))
   console.log(chalk.dim('─'.repeat(45)))
-  console.log(chalk.dim(`  PieceCID : ${pieceCid}`))
-  console.log(chalk.dim(`  Save to  : ${outPath}`))
+  console.log(chalk.dim(`  CID     : ${cid}`))
+  console.log(chalk.dim(`  Save to : ${outPath}`))
   console.log()
 
-  // ── Load config & create client ───────────────────────────────────────────────
-  const config = loadConfig()
-  const synapse = createSynapse(config.privateKey)
+  const spinner = ora('Fetching from IPFS gateway…').start()
 
-  // ── Download ──────────────────────────────────────────────────────────────────
-  const spinner = ora('Fetching file from Filecoin…').start()
-
-  let data: Uint8Array
-
+  let data: ArrayBuffer
   try {
-    data = await synapse.storage.download({ pieceCid })
+    data = await fetchFromGateways(cid)
     spinner.succeed('Download complete!')
   } catch (err: unknown) {
     spinner.fail('Download failed')
     const message = err instanceof Error ? err.message : String(err)
     console.error(chalk.red(`\n✗ ${message}`))
     console.error(chalk.dim('\n  Make sure:'))
-    console.error(chalk.dim('  • The PieceCID is correct'))
-    console.error(chalk.dim('  • The file was uploaded with CDN enabled'))
-    console.error(chalk.dim('  • You have sufficient funds / allowances on the storage contract'))
+    console.error(chalk.dim('  • The CID is correct (IPFS root CID from upload)'))
+    console.error(chalk.dim('  • The content was uploaded and IPNI-validated'))
     process.exit(1)
   }
 
-  // ── Write to disk ─────────────────────────────────────────────────────────────
   fs.writeFileSync(outPath, Buffer.from(data))
 
   const fileSizeKB = (data.byteLength / 1024).toFixed(2)

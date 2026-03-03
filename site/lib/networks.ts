@@ -83,7 +83,7 @@ export const NETWORKS: Record<NetworkId, NetworkConfig> = {
     explorerTokenUrl:
       "https://calibration.filscan.io/token/0xa450345b850088f68b8982c57fe987124533e194?a=",
     // GLIF RPC disallows lookbacks > ~16h40m; use 500 blocks (~4h) to stay well under limit
-    maxLookbackBlocks: 500,
+    maxLookbackBlocks: 1000,
   },
 };
 

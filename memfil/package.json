@@ -1,26 +1,33 @@
 {
-  "name": "filecoin-synapse-cli",
+  "name": "memfil",
   "version": "1.0.0",
-  "description": "CLI tool for uploading and downloading files from Filecoin via Synapse SDK",
+  "description": "Marketplace client for Episodes: discover, buy, and use agents/memories; upload to Filecoin",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "synapse-cli": "./dist/index.js"
+    "memfil": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",
+    "search": "tsx src/index.ts search",
+    "buy-agent": "tsx src/index.ts buy-agent",
+    "buy-memory": "tsx src/index.ts buy-memory",
     "upload": "tsx src/index.ts upload",
     "download": "tsx src/index.ts download",
+    "payments-setup": "tsx src/index.ts payments setup",
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@filoz/synapse-sdk": "latest",
+    "@x402/core": "^2.5.0",
+    "@x402/evm": "^2.5.0",
+    "@x402/fetch": "^2.5.0",
     "chalk": "^5.3.0",
     "commander": "^12.1.0",
     "dotenv": "^16.4.5",
-    "ethers": "^6.13.0",
+    "filecoin-pin": "latest",
     "ora": "^8.0.1",
+    "pino": "^10.3.1",
     "viem": "^2.46.3"
   },
   "devDependencies": {

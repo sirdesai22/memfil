@@ -68,12 +68,13 @@ The marketplace frontend and API. Built with:
 |---|---|---|
 | `/api/agents` | GET | List agents with pagination, search, filtering by protocol/network |
 | `/api/agents/[id]` | GET | Single agent detail with reputation score |
+| `/api/agents/register` | POST | Register an agent on-chain (metadata uploaded to Filecoin, CID stored on-chain) |
 
 #### On-Chain Agent Registry (ERC-8004)
 
 Agents are registered on-chain using the ERC-8004 standard. The site reads from two smart contracts per network:
 
-- **IdentityRegistry** — Stores agent registrations. Each agent has a `tokenURI` pointing to metadata (IPFS or HTTP).
+- **IdentityRegistry** — Stores agent registrations. Each agent has a `tokenURI` pointing to metadata. Metadata is stored on Filecoin via [filecoin-pin](https://github.com/filecoin-project/filecoin-pin); the on-chain `tokenURI` is an `ipfs://` URI.
 - **ReputationRegistry** — Stores feedback and reputation scores per agent.
 
 Agent metadata includes:
@@ -164,7 +165,7 @@ A CLI tool for storing AI session memory on Filecoin. Also serves as a Cursor ag
 Built with:
 
 - **TypeScript**, **Commander.js** for CLI
-- **@filoz/synapse-sdk** for Filecoin storage
+- **[filecoin-pin](https://github.com/filecoin-project/filecoin-pin)** for Filecoin storage
 - **viem** for wallet management
 
 #### Commands
@@ -173,8 +174,8 @@ Built with:
 # Upload a file to Filecoin (Calibration testnet)
 cd memfil && pnpm upload -- ./episode-file.md -o ./cid.json
 
-# Download a file by PieceCID
-cd memfil && pnpm download -- <pieceCid> --out ./downloads/file.md
+# Download a file by CID (IPFS root CID from upload)
+cd memfil && pnpm download -- <cid> --out ./downloads/file.md
 ```
 
 #### As a Cursor Skill
@@ -182,7 +183,7 @@ cd memfil && pnpm download -- <pieceCid> --out ./downloads/file.md
 When an AI agent is told to "export memory" or "save session to Filecoin", it follows the `SKILL.md` instructions to:
 
 1. Write the current session as a structured markdown episode (context, decisions, artifacts, outcome, metadata).
-2. Upload to Filecoin via the Synapse SDK, receiving a PieceCID.
+2. Upload to Filecoin via filecoin-pin, receiving an IPFS root CID.
 3. Report the CID back — the episode is now permanently stored and CID-verifiable.
 
 #### Episode File Structure
@@ -210,10 +211,11 @@ When an AI agent is told to "export memory" or "save session to Filecoin", it fo
 
 #### Storage Payment
 
-Filecoin storage is paid with **USDFC** via the Synapse payments contract. The wallet needs:
+Filecoin storage is paid with **USDFC** via filecoin-pin. The wallet needs:
 
 - **tFIL** for gas (from [Calibration faucet](https://faucet.calibnet.chainsafe-fil.io))
-- **USDFC** deposited into the Synapse contract (via [upload dapp](https://fs-upload-dapp.netlify.app))
+- **USDFC** for storage (from [USDFC faucet](https://forest-explorer.chainsafe.dev/faucet/calibnet_usdfc))
+- One-time setup: `pnpm payments-setup` (from memfil directory)
 
 ## Getting Started
 
@@ -230,12 +232,28 @@ pnpm install
 pnpm dev          # Starts on http://localhost:3000
 ```
 
-Optional environment variables:
+Environment variables:
 
 ```env
+# Required for server-managed agent registration (POST /api/agents/register)
+# Wallet must hold:
+#   - tFIL on Filecoin Calibration for gas (faucet: https://faucet.calibnet.chainsafe-fil.io)
+#   - USDFC for metadata storage (faucet: https://forest-explorer.chainsafe.dev/faucet/calibnet_usdfc)
+# Run `pnpm payments-setup` from memfil/ once to configure allowances (or use site's SERVER_PRIVATE_KEY wallet)
+SERVER_PRIVATE_KEY=0x<funded_wallet_private_key>
+
+# Optional
 SUBGRAPH_URL_SEPOLIA=<custom subgraph endpoint>
 BASE_SEPOLIA_RPC=<custom RPC URL>
 SEPOLIA_RPC=<custom RPC URL>
+FILECOIN_CALIBRATION_RPC=<custom RPC URL for Filecoin Calibration>
+FILECOIN_NETWORK=calibration
+FILECOIN_RPC_URL=<custom Filecoin RPC WebSocket URL>
+
+# x402 payment layer (defaults shown)
+X402_FACILITATOR_URL=https://www.x402.org/facilitator
+X402_DEFAULT_PRICE=$0.01
+X402_NETWORK=eip155:84532
 ```
 
 ### Memfil
@@ -251,9 +269,8 @@ pnpm upload -- ./experience01.md -o ./cid.json
 Required environment variables:
 
 ```env
-WALLET_PRIVATE_KEY=0x<your_key>
+WALLET_PRIVATE_KEY=0x<your_key>   # or PRIVATE_KEY
 NETWORK=calibration
-WITH_CDN=true
 ```
 
 ## The Vision
@@ -274,5 +291,5 @@ Episodes stored on Filecoin via memfil are content-addressed and permanent, mean
 - [x402 Whitepaper](https://www.x402.org/x402-whitepaper.pdf) — Technical specification
 - [CDP Facilitator Docs](https://docs.cdp.coinbase.com/x402/core-concepts/facilitator) — Hosted payment verification and settlement
 - [ERC-8004](https://ethereum-magicians.org/t/erc-8004-agent-registry/22105) — On-chain agent identity standard
-- [Synapse SDK](https://github.com/filoz/synapse-sdk) — Filecoin storage SDK used by memfil
+- [filecoin-pin](https://github.com/filecoin-project/filecoin-pin) — Filecoin storage for memfil and agent metadata
 - [Coinbase x402 Launch](https://www.coinbase.com/en-in/developer-platform/discover/launches/x402) — Protocol announcement

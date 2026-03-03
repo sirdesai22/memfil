@@ -1,5 +1,5 @@
 export interface DownloadOptions {
     out?: string;
 }
-export declare function downloadCommand(pieceCid: string, options: DownloadOptions): Promise<void>;
+export declare function downloadCommand(cid: string, options: DownloadOptions): Promise<void>;
 //# sourceMappingURL=download.d.ts.map

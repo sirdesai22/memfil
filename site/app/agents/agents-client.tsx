@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { RefreshCw } from "lucide-react";
+import { Plus, RefreshCw } from "lucide-react";
 import { WorkspaceLayout } from "@/components/workspace-layout";
 import {
   RegistryAgentFilterSidebar,
@@ -160,17 +161,25 @@ export function AgentsPageClient({
               )}
             </p>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() =>
-              fetchAgents(currentPage, searchQuery, protocol, network)
-            }
-            disabled={isLoading}
-            title="Refresh"
-          >
-            <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/agents/upload">
+                <Plus className="mr-1.5 h-4 w-4" />
+                Register agent
+              </Link>
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() =>
+                fetchAgents(currentPage, searchQuery, protocol, network)
+              }
+              disabled={isLoading}
+              title="Refresh"
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+            </Button>
+          </div>
         </div>
 
         {/* Content */}
