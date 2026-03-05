@@ -31,6 +31,12 @@ Key concepts:
 
 ## Architecture
 
+<p align="center">
+  <img src="MemFilArch.png" alt="Episodes Architecture Diagram" width="100%" />
+</p>
+
+
+
 ```
 episodes/
 ├── site/            # Next.js 16 marketplace frontend + API
