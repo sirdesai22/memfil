@@ -3,6 +3,7 @@ import { unstable_cache } from "next/cache";
 import { fetchAgentById } from "@/lib/registry";
 import type { NetworkId } from "@/lib/networks";
 import { DEFAULT_NETWORK, NETWORK_IDS } from "@/lib/networks";
+import { parseAgentCardServices } from "@/lib/agent-validator";
 
 export async function GET(
   request: NextRequest,
@@ -29,7 +30,10 @@ export async function GET(
         { status: 404 }
       );
     }
-    return NextResponse.json({ success: true, agent });
+    const invocationGuide = agent.metadata
+      ? parseAgentCardServices(agent.metadata as Parameters<typeof parseAgentCardServices>[0])
+      : null;
+    return NextResponse.json({ success: true, agent, invocationGuide });
   } catch (error) {
     console.error("[Agent API]", error);
     return NextResponse.json(

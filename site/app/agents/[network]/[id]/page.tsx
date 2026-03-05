@@ -10,11 +10,13 @@ import {
   Loader2,
   MessageSquare,
   Star,
+  Terminal,
   Zap,
 } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { AgentDetail, AgentMetadata } from "@/lib/registry";
+import type { ParsedServices } from "@/lib/agent-validator";
 import { getExplorerUrl, getNetwork, NETWORK_IDS, type NetworkId } from "@/lib/networks";
 import { GiveFeedback } from "@/components/give-feedback";
 
@@ -184,9 +186,166 @@ function RawMetadataCard({
   );
 }
 
+// ── Invoke section ────────────────────────────────────────────────────────────
+
+function InvokeSection({
+  agentId,
+  networkId,
+  invocationGuide,
+  healthStatus,
+}: {
+  agentId: string;
+  networkId: string;
+  invocationGuide: ParsedServices | null;
+  healthStatus: "ok" | "unreachable" | "unknown";
+}) {
+  if (!invocationGuide) {
+    return (
+      <Card className="border-border">
+        <CardContent className="pt-6 text-center text-sm text-muted-foreground">
+          This agent has no x402 invocation guide in its card metadata.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const { x402Endpoint, cost, currency, network, inputSchema, healthUrl } =
+    invocationGuide;
+
+  const curlCommand = `curl -X POST "${x402Endpoint}" \\
+  -H "Content-Type: application/json" \\
+  -H "X-PAYMENT: <x402-payment-token>" \\
+  -d '${JSON.stringify(
+    inputSchema && "properties" in inputSchema
+      ? Object.fromEntries(
+          Object.keys((inputSchema as { properties: Record<string, unknown> }).properties).map(
+            (k) => [k, `<${k}>`]
+          )
+        )
+      : { body: "..." }
+  )}'`;
+
+  return (
+    <div className="space-y-6">
+      {/* Health status */}
+      <Card className="border-border">
+        <CardHeader className="pb-3">
+          <h2 className="font-semibold text-sm flex items-center gap-2">
+            <Terminal className="h-4 w-4 text-primary" />
+            Agent Status
+          </h2>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-2">
+            <span
+              className={`h-2.5 w-2.5 rounded-full ${
+                healthStatus === "ok"
+                  ? "bg-emerald-500"
+                  : healthStatus === "unreachable"
+                    ? "bg-red-500"
+                    : "bg-zinc-400"
+              }`}
+            />
+            <span className="text-sm">
+              {healthStatus === "ok"
+                ? "Live"
+                : healthStatus === "unreachable"
+                  ? "Unreachable"
+                  : "Status unknown"}
+            </span>
+            {healthUrl && (
+              <span className="ml-auto text-xs font-mono text-muted-foreground truncate max-w-[300px]">
+                {healthUrl}
+              </span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* x402 invocation info */}
+      <Card className="border-border">
+        <CardHeader className="pb-3">
+          <h2 className="font-semibold text-sm flex items-center gap-2">
+            <Zap className="h-4 w-4 text-violet-500" />
+            x402 Invocation
+          </h2>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Endpoint */}
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+              Endpoint
+            </p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 truncate rounded bg-muted px-2 py-1.5 text-xs font-mono">
+                {x402Endpoint}
+              </code>
+              <button
+                onClick={() => copyText(x402Endpoint)}
+                className="shrink-0 text-muted-foreground hover:text-foreground"
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Cost + network */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Cost
+              </p>
+              <p className="text-sm font-semibold">
+                {cost ? `${cost} ${currency}` : "—"}
+              </p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Network
+              </p>
+              <p className="text-sm font-mono">{network || "—"}</p>
+            </div>
+          </div>
+
+          {/* Input schema */}
+          {inputSchema && (
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Input Schema
+              </p>
+              <pre className="overflow-x-auto rounded-lg border border-border bg-muted/40 p-3 text-xs leading-relaxed">
+                {JSON.stringify(inputSchema, null, 2)}
+              </pre>
+            </div>
+          )}
+
+          {/* curl command */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Example curl
+              </p>
+              <button
+                onClick={() => copyText(curlCommand)}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <Copy className="h-3 w-3" />
+                Copy
+              </button>
+            </div>
+            <pre className="overflow-x-auto rounded-lg border border-border bg-muted/40 p-3 text-[11px] leading-relaxed whitespace-pre-wrap break-all">
+              {curlCommand}
+            </pre>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 // ── page ─────────────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "raw";
+type Tab = "overview" | "invoke" | "raw";
 
 export default function AgentDetailPage() {
   const params = useParams<{ network: string; id: string }>();
@@ -197,6 +356,8 @@ export default function AgentDetailPage() {
   const id = params.id;
 
   const [agent, setAgent] = useState<AgentDetail | null>(null);
+  const [invocationGuide, setInvocationGuide] = useState<ParsedServices | null>(null);
+  const [healthStatus, setHealthStatus] = useState<"ok" | "unreachable" | "unknown">("unknown");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("overview");
@@ -211,11 +372,21 @@ export default function AgentDetailPage() {
     fetch(`/api/agents/${id}?network=${networkId}`)
       .then((r) => r.json())
       .then((data) => {
-        if (data.success) setAgent(data.agent);
-        else setError(data.error ?? "Failed to load agent");
+        if (data.success) {
+          setAgent(data.agent);
+          if (data.invocationGuide) setInvocationGuide(data.invocationGuide);
+        } else {
+          setError(data.error ?? "Failed to load agent");
+        }
       })
       .catch(() => setError("Network error"))
       .finally(() => setLoading(false));
+
+    // Fetch live health status
+    fetch(`/api/agents/${id}/health?network=${networkId}`)
+      .then((r) => r.json())
+      .then((d) => setHealthStatus(d.status === "ok" ? "ok" : "unreachable"))
+      .catch(() => setHealthStatus("unreachable"));
   }, [id, networkId]);
 
   if (loading) {
@@ -330,7 +501,7 @@ export default function AgentDetailPage() {
 
       {/* Tabs */}
       <div className="mb-6 flex gap-6 border-b border-border">
-        {(["overview", "raw"] as Tab[]).map((t) => (
+        {(["overview", "invoke", "raw"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -340,7 +511,7 @@ export default function AgentDetailPage() {
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            {t === "raw" ? "Raw Metadata" : "Overview"}
+            {t === "raw" ? "Raw Metadata" : t === "invoke" ? "Invoke" : "Overview"}
           </button>
         ))}
       </div>
@@ -499,6 +670,15 @@ export default function AgentDetailPage() {
             </Card>
           </div>
         </div>
+      )}
+
+      {tab === "invoke" && (
+        <InvokeSection
+          agentId={agent.agentId}
+          networkId={networkId}
+          invocationGuide={invocationGuide}
+          healthStatus={healthStatus}
+        />
       )}
 
       {tab === "raw" && <RawMetadataCard agentURI={agent.agentURI} metadata={metadata} />}
