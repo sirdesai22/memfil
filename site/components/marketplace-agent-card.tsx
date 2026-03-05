@@ -46,9 +46,21 @@ interface MarketplaceAgentCardProps {
   agent: RegistryAgent;
 }
 
+// Replace bare Unix timestamps (10-digit, seconds since epoch) with readable dates
+function formatDescription(text: string): string {
+  return text.replace(/\b(1[5-9]\d{8}|2\d{9})\b/g, (ts) =>
+    new Date(Number(ts) * 1000).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    })
+  );
+}
+
 export function MarketplaceAgentCard({ agent }: MarketplaceAgentCardProps) {
   const name = agent.metadata?.name ?? `Agent #${agent.agentId}`;
-  const description = agent.metadata?.description;
+  const rawDescription = agent.metadata?.description;
+  const description = rawDescription ? formatDescription(rawDescription) : undefined;
   const image = agent.metadata?.image;
   const networkId = agent.networkId ?? "sepolia";
   const network = getNetwork(networkId);

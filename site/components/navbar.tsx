@@ -10,9 +10,8 @@ import { cn } from "@/lib/utils";
 
 const NAV_LINKS = [
   { href: "/marketplace", label: "Marketplace", exact: false },
-  { href: "/agents", label: "Agent Registry", exact: true },
   { href: "/agents/register", label: "Register Agent", exact: false },
-  { href: "/explore", label: "Skills", exact: false },
+  { href: "/artifacts", label: "Artifacts", exact: false },
   { href: "/docs", label: "Docs", exact: false },
 ];
 
