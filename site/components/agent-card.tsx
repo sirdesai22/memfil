@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import type { Agent } from "@/lib/data";
 import type { RegistryAgent } from "@/lib/registry";
@@ -84,6 +85,39 @@ function getAgentPlaceholderImage(agentId: string, agentName?: string): string {
   return `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(seed)}&backgroundColor=amber,stone&size=128`;
 }
 
+// ── Live health dot ────────────────────────────────────────────────────────────
+
+function HealthDot({ agentId, networkId }: { agentId: string; networkId: string }) {
+  const [status, setStatus] = useState<"ok" | "unreachable" | "unknown">("unknown");
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/agents/${agentId}/health?network=${networkId}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!cancelled) setStatus(d.status === "ok" ? "ok" : "unreachable");
+      })
+      .catch(() => {
+        if (!cancelled) setStatus("unreachable");
+      });
+    return () => { cancelled = true; };
+  }, [agentId, networkId]);
+
+  if (status === "unknown") return null;
+
+  return (
+    <span
+      title={status === "ok" ? "Agent is live" : "Agent unreachable"}
+      className={cn(
+        "absolute top-1.5 right-1.5 h-2 w-2 rounded-full border border-background",
+        status === "ok" ? "bg-emerald-500" : "bg-zinc-400"
+      )}
+    />
+  );
+}
+
+// ── Registry agent card ────────────────────────────────────────────────────────
+
 interface RegistryAgentCardProps {
   agent: RegistryAgent;
   /** Called when the agent's image fails to load (only when using a real image URL, not placeholder) */
@@ -145,6 +179,7 @@ export function RegistryAgentCard({ agent, onImageError }: RegistryAgentCardProp
               onError={image ? onImageError : undefined}
             />
             <div className="absolute inset-0.5 rounded-sm border border-amber-600/20 dark:border-amber-500/10" />
+            <HealthDot agentId={agent.agentId} networkId={networkId} />
           </div>
           <div
             className={cn(

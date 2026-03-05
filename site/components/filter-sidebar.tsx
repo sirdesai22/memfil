@@ -49,19 +49,22 @@ export function MemoryFilterSidebar({
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="mb-3 text-sm font-medium text-foreground">Tags</h3>
-        <div className="flex flex-wrap gap-2">
+    <div className="space-y-5">
+      {/* Tags */}
+      <div className="space-y-1.5">
+        <p className="px-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+          Tags
+        </p>
+        <div className="flex flex-wrap gap-1.5">
           {MEMORY_TAGS.map((tag) => (
             <button
               key={tag}
               onClick={() => toggleTag(tag)}
               className={cn(
-                "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                "rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
                 selectedTags.includes(tag)
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+                  ? "bg-amber-900/15 text-amber-900 dark:bg-amber-100/15 dark:text-amber-200"
+                  : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
             >
               {tag}
@@ -70,18 +73,21 @@ export function MemoryFilterSidebar({
         </div>
       </div>
 
-      <Separator />
+      <Separator className="opacity-50" />
 
-      <div>
-        <h3 className="mb-3 text-sm font-medium text-foreground">Sort by</h3>
+      {/* Sort */}
+      <div className="space-y-1.5">
+        <p className="px-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+          Sort
+        </p>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="w-full justify-between">
+            <Button variant="outline" size="sm" className="h-8 w-full justify-between gap-1 text-xs">
               {SORT_LABELS[sort]}
-              <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              <ChevronDown className="h-3 w-3 opacity-50" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-[--radix-dropdown-menu-trigger-width]">
+          <DropdownMenuContent align="start" className="w-48">
             {(Object.keys(SORT_LABELS) as SortOption[]).map((opt) => (
               <DropdownMenuItem key={opt} onClick={() => onSortChange(opt)}>
                 {SORT_LABELS[opt]}
@@ -91,23 +97,24 @@ export function MemoryFilterSidebar({
         </DropdownMenu>
       </div>
 
-      <Separator />
+      <Separator className="opacity-50" />
 
-      <div>
-        <h3 className="mb-3 text-sm font-medium text-foreground">Price (FIL)</h3>
-        <div className="space-y-2">
-          <Slider
-            value={priceRange}
-            onValueChange={(v) => onPriceRangeChange(v as [number, number])}
-            min={0}
-            max={1}
-            step={0.05}
-            className="w-full"
-          />
-          <p className="text-xs text-muted-foreground">
-            {priceRange[0].toFixed(2)} – {priceRange[1].toFixed(2)} FIL
-          </p>
-        </div>
+      {/* Price range */}
+      <div className="space-y-2">
+        <p className="px-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+          Price
+        </p>
+        <span className="block px-1 text-xs text-muted-foreground">
+          {priceRange[0].toFixed(2)} – {priceRange[1].toFixed(2)} FIL
+        </span>
+        <Slider
+          value={priceRange}
+          onValueChange={(v) => onPriceRangeChange(v as [number, number])}
+          min={0}
+          max={1}
+          step={0.05}
+          className="w-full"
+        />
       </div>
     </div>
   );
@@ -199,6 +206,41 @@ const PROTOCOL_LABELS: Record<ProtocolFilter, string> = {
   a2a: "A2A",
 };
 
+function SidebarSection({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <p className="px-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+        {label}
+      </p>
+      {children}
+    </div>
+  );
+}
+
+function SidebarNavItem({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "w-full rounded-md px-2.5 py-1.5 text-left text-sm transition-all duration-150",
+        active
+          ? "bg-amber-900/10 font-semibold text-amber-900 dark:bg-amber-100/10 dark:text-amber-200"
+          : "font-normal text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function RegistryAgentFilterSidebar({
   protocol,
   onProtocolChange,
@@ -211,77 +253,65 @@ export function RegistryAgentFilterSidebar({
   onShowIncompleteAgentsChange,
 }: RegistryAgentFilterSidebarProps) {
   return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="mb-3 text-sm font-medium text-foreground">Network</h3>
-        <div className="flex flex-col gap-1.5">
+    <div className="space-y-5">
+      <SidebarSection label="Network">
+        <div className="flex flex-col gap-0.5">
           {networks.map((n) => (
-            <button
+            <SidebarNavItem
               key={n.id}
+              active={network === n.id}
               onClick={() => onNetworkChange(n.id)}
-              className={cn(
-                "rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors",
-                network === n.id
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              )}
             >
               {n.name}
-            </button>
+            </SidebarNavItem>
           ))}
         </div>
-      </div>
+      </SidebarSection>
 
-      <Separator />
+      <Separator className="opacity-50" />
 
-      <div>
-        <h3 className="mb-3 text-sm font-medium text-foreground">Search</h3>
+      <SidebarSection label="Search">
         <input
           type="text"
           placeholder="Name or address…"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          className="h-8 w-full rounded-md border border-border bg-muted/40 px-2.5 text-sm placeholder:text-muted-foreground/60 focus:border-amber-700/50 focus:bg-background focus:outline-none focus:ring-1 focus:ring-amber-700/30 dark:focus:border-amber-400/40 dark:focus:ring-amber-400/20"
         />
-      </div>
+      </SidebarSection>
 
-      <Separator />
+      <Separator className="opacity-50" />
 
-      <div>
-        <h3 className="mb-3 text-sm font-medium text-foreground">Protocol</h3>
-        <div className="flex flex-col gap-1.5">
+      <SidebarSection label="Protocol">
+        <div className="flex flex-col gap-0.5">
           {PROTOCOLS.map((p) => (
-            <button
+            <SidebarNavItem
               key={p}
+              active={protocol === p}
               onClick={() => onProtocolChange(p)}
-              className={cn(
-                "rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors",
-                protocol === p
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              )}
             >
               {PROTOCOL_LABELS[p]}
-            </button>
+            </SidebarNavItem>
           ))}
         </div>
-      </div>
+      </SidebarSection>
 
-      <Separator />
+      <Separator className="opacity-50" />
 
-      <div>
-        <div className="flex items-center space-x-2">
-          <input
-            type="checkbox"
-            id="show-incomplete"
-            checked={showIncompleteAgents}
-            onChange={(e) => onShowIncompleteAgentsChange(e.target.checked)}
-            className="h-4 w-4 rounded border-border"
-          />
-          <Label htmlFor="show-incomplete" className="text-sm font-normal cursor-pointer">
-            Show agents without image or metadata
-          </Label>
-        </div>
+      <div className="flex items-start gap-2.5 px-0.5">
+        <input
+          type="checkbox"
+          id="show-incomplete"
+          checked={showIncompleteAgents}
+          onChange={(e) => onShowIncompleteAgentsChange(e.target.checked)}
+          className="mt-0.5 h-3.5 w-3.5 shrink-0 cursor-pointer rounded-sm border-border accent-amber-800"
+        />
+        <Label
+          htmlFor="show-incomplete"
+          className="cursor-pointer text-xs font-normal leading-snug text-muted-foreground"
+        >
+          Show agents without image or metadata
+        </Label>
       </div>
     </div>
   );

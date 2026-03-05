@@ -62,8 +62,9 @@ export function MemoryCard({ memory, onBuyClick }: MemoryCardProps) {
   const p = BOOK_PALETTES[primaryTag] ?? FALLBACK;
 
   return (
-    <div
-      className="group relative flex overflow-hidden rounded-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl"
+    <Link
+      href={`/memory/${memory.id}`}
+      className="group relative flex overflow-hidden rounded-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl cursor-pointer"
       style={{
         background: p.cover,
         boxShadow: `
@@ -94,19 +95,17 @@ export function MemoryCard({ memory, onBuyClick }: MemoryCardProps) {
         </div>
 
         {/* Title */}
-        <Link href={`/memory/${memory.id}`} className="block mb-2">
-          <h3
-            className="font-bold leading-snug tracking-wide group-hover:opacity-90 transition-opacity"
-            style={{
-              fontFamily: "var(--font-playfair-display), serif",
-              color: p.text,
-              fontSize: "1.05rem",
-              textShadow: `0 1px 4px rgba(0,0,0,0.5)`,
-            }}
-          >
-            {memory.name}
-          </h3>
-        </Link>
+        <h3
+          className="font-bold leading-snug tracking-wide mb-2 group-hover:opacity-90 transition-opacity"
+          style={{
+            fontFamily: "var(--font-playfair-display), serif",
+            color: p.text,
+            fontSize: "1.05rem",
+            textShadow: `0 1px 4px rgba(0,0,0,0.5)`,
+          }}
+        >
+          {memory.name}
+        </h3>
 
         {/* Description */}
         <p
@@ -150,12 +149,12 @@ export function MemoryCard({ memory, onBuyClick }: MemoryCardProps) {
               color: p.text,
               borderColor: p.border,
             }}
-            onClick={() => onBuyClick?.(memory)}
+            onClick={(e) => { e.preventDefault(); onBuyClick?.(memory); }}
           >
             Buy & Install
           </Button>
         </div>
       </div>
-    </div>
+    </Link>
   );
 }

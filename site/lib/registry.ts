@@ -30,6 +30,9 @@ export interface AgentMetadata {
   mcpTools?: string[];
   a2aEndpoint?: string;
   a2aSkills?: string[];
+  healthUrl?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  services?: any[];
 }
 
 export interface RegistryAgent {
