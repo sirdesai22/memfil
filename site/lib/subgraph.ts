@@ -119,11 +119,8 @@ function subgraphAgentToRegistryAgent(
   };
 }
 
-/**
- * Build subgraph agent entity ID. ERC-8004 subgraph uses {registryAddress}-{agentId}.
- */
-function buildSubgraphAgentId(identityRegistry: string, agentId: string): string {
-  return `${identityRegistry.toLowerCase()}-${agentId}`;
+function buildSubgraphAgentId(chainId: number, agentId: string): string {
+  return `${chainId}:${agentId}`;
 }
 
 const SUBGRAPH_PAGE_SIZE = 500;
@@ -162,24 +159,71 @@ export async function fetchAgentsFromSubgraph(
   return allAgents;
 }
 
+const GET_AGENT_ONLY = gql`
+  query GetAgent($id: ID!) {
+    agent(id: $id) {
+      ${AGENT_FIELDS}
+    }
+  }
+`;
+
+// Minimal fallback — only fields confirmed to exist across all deployments
+const GET_AGENT_MINIMAL = gql`
+  query GetAgentMinimal($id: ID!) {
+    agent(id: $id) {
+      id
+      agentId
+      chainId
+      owner
+      agentURI
+    }
+  }
+`;
+
 export async function fetchAgentByIdFromSubgraph(
   subgraphUrl: string,
-  identityRegistry: string,
   agentId: string,
-  networkId: NetworkId
+  networkId: NetworkId,
+  chainId: number
 ): Promise<AgentDetail | null> {
-  const id = buildSubgraphAgentId(identityRegistry, agentId);
+  const id = buildSubgraphAgentId(chainId, agentId);
   const client = new GraphQLClient(subgraphUrl);
 
-  const response = await client.request<{
-    agent: SubgraphAgent | null;
-    agentStats: SubgraphAgentStats | null;
-  }>(GET_AGENT_WITH_STATS, { id });
+  // Try progressively simpler queries until one works
+  let subgraphAgent: SubgraphAgent | null = null;
+  let stats: SubgraphAgentStats | null = null;
 
-  if (!response.agent) return null;
+  try {
+    const response = await client.request<{
+      agent: SubgraphAgent | null;
+      agentStats: SubgraphAgentStats | null;
+    }>(GET_AGENT_WITH_STATS, { id });
+    subgraphAgent = response.agent;
+    stats = response.agentStats;
+  } catch {
+    try {
+      const response = await client.request<{ agent: SubgraphAgent | null }>(
+        GET_AGENT_ONLY,
+        { id }
+      );
+      subgraphAgent = response.agent;
+    } catch {
+      // Schema may not support all AGENT_FIELDS — fall back to minimal query
+      try {
+        const response = await client.request<{ agent: SubgraphAgent | null }>(
+          GET_AGENT_MINIMAL,
+          { id }
+        );
+        subgraphAgent = response.agent;
+      } catch {
+        return null;
+      }
+    }
+  }
 
-  const metadata = subgraphMetadataToAgentMetadata(response.agent.registrationFile);
-  const stats = response.agentStats;
+  if (!subgraphAgent) return null;
+  const agent = subgraphAgent;
+  const metadata = subgraphMetadataToAgentMetadata(agent.registrationFile);
 
   const totalFeedback = stats
     ? parseInt(stats.totalFeedback, 10) || 0
@@ -191,8 +235,8 @@ export async function fetchAgentByIdFromSubgraph(
   return {
     id: `${networkId}:${agentId}`,
     agentId,
-    owner: response.agent.owner,
-    agentURI: response.agent.agentURI ?? "",
+    owner: agent.owner,
+    agentURI: agent.agentURI ?? "",
     blockNumber: "0",
     metadata,
     protocols: getProtocols(metadata),

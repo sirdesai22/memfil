@@ -4,7 +4,8 @@ import type { NetworkId } from "@/lib/networks";
 import { DEFAULT_NETWORK, NETWORK_IDS } from "@/lib/networks";
 
 // GET /api/agents/[id]/health?network=sepolia
-// Proxies to the agent's healthUrl from its metadata and returns live status.
+// Returns live health status. Both the agent lookup and the remote health
+// fetch are optional — missing or failing either returns status: "unknown".
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -16,20 +17,20 @@ export async function GET(
     ? (networkParam as NetworkId)
     : DEFAULT_NETWORK;
 
-  const agent = await fetchAgentById(id, network);
-  if (!agent) {
-    return NextResponse.json(
-      { agentId: id, status: "unreachable", error: "Agent not found" },
-      { status: 404 }
-    );
+  // Agent lookup is best-effort — failure is not fatal
+  let healthUrl: string | undefined;
+  try {
+    const agent = await fetchAgentById(id, network);
+    healthUrl = agent?.metadata?.healthUrl;
+  } catch {
+    console.warn(`[health] Could not fetch agent ${id} on ${network}`);
   }
 
-  const healthUrl = agent.metadata?.healthUrl;
   if (!healthUrl) {
     return NextResponse.json({
       agentId: id,
       status: "unknown",
-      error: "Agent has no healthUrl in metadata",
+      warning: "Agent has no healthUrl in metadata",
       timestamp: new Date().toISOString(),
     });
   }
@@ -45,14 +46,15 @@ export async function GET(
     if (!res.ok) {
       return NextResponse.json({
         agentId: id,
-        status: "unreachable",
+        status: "unknown",
+        warning: `Health endpoint returned HTTP ${res.status}`,
         latencyMs,
         timestamp: new Date().toISOString(),
       });
     }
 
-    const body = await res.json();
-    const status = body?.status === "ok" ? "ok" : "unreachable";
+    const body = await res.json().catch(() => ({}));
+    const status = body?.status === "ok" ? "ok" : "unknown";
 
     return NextResponse.json({
       agentId: id,
@@ -60,10 +62,13 @@ export async function GET(
       latencyMs,
       timestamp: new Date().toISOString(),
     });
-  } catch {
+  } catch (e) {
+    const warning = e instanceof Error ? e.message : "Health fetch failed";
+    console.warn(`[health] ${id}: ${warning}`);
     return NextResponse.json({
       agentId: id,
-      status: "unreachable",
+      status: "unknown",
+      warning,
       latencyMs: Date.now() - start,
       timestamp: new Date().toISOString(),
     });
