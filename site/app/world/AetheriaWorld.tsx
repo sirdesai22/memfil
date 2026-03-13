@@ -218,7 +218,7 @@ export function AetheriaWorld({
       })
       .then(({ THREE, gltf }) => {
         if (cancelled) return;
-        initWorld(THREE, containerRef.current!, dataRef, setSelectedAgentId, gltf as { scene: unknown; animations: { name: string }[] }, () => router.push("/marketplace"));
+        initWorld(THREE, containerRef.current!, dataRef, setSelectedAgentId, gltf as { scene: any; animations: any[] }, () => router.push("/marketplace"));
         setLoading(false);
         rafId = requestAnimationFrame(function loop() {
           if (cancelled) return;
@@ -1195,11 +1195,20 @@ function initWorld(
   // ── Data-stream particles (campfire → depot: "data flowing to Filecoin") ─────
   const STREAM_PARTICLE_COUNT = 40;
   const depotEnd = new THREE.Vector3(STORAGE_POS.x, ty + 2, STORAGE_POS.z);
+  const depotStartPos = new THREE.Vector3(STORAGE_POS.x, ty, STORAGE_POS.z);
   type DataStreamItem = {
     points: { geometry: { attributes: { position: { count: number; array: Float32Array; needsUpdate?: boolean } } }; material: { opacity?: number } };
     phases: number[];
     start: { x: number; y: number; z: number };
     end: { x: number; y: number; z: number };
+  };
+  type StorageCarrier = {
+    mesh: any;
+    mixer: any;
+    phase: number;
+    direction: number;
+    startPos: any;
+    endPos: any;
   };
   const storageCarriers: StorageCarrier[] = [];
   const walkClipForCarrier = gltf.animations?.find((a: { name: string }) => a.name === "Walking") ?? null;
@@ -1296,6 +1305,12 @@ function initWorld(
     idleClip: { name: string } | null;
     sittingClip: { name: string } | null;
     activeMixerAction: { fadeOut: (d: number) => void; reset: () => { setEffectiveTimeScale: (s: number) => unknown; setEffectiveWeight: (w: number) => unknown; fadeIn: (d: number) => { play: () => void }; play: () => void }; play: () => void } | null;
+    // NPC wander state
+    wanderTarget: { x: number; z: number } | null;
+    wanderTimer: number;
+    wanderState: "idle" | "walking";
+    homeX: number;
+    homeZ: number;
   }
 
   const agentCreatures: AgentCreature[] = [];
@@ -1309,6 +1324,12 @@ function initWorld(
   const idleClip = gltf.animations?.find((a: { name: string }) => a.name === "Idle") ?? null;
   const walkClip = gltf.animations?.find((a: { name: string }) => a.name === "Walking") ?? null;
   const sittingClip = gltf.animations?.find((a: { name: string }) => a.name === "Sitting") ?? null;
+  // Idle-suitable animations to randomly play when agents stop moving
+  const IDLE_ANIM_NAMES = ["Idle", "Wave", "ThumbsUp", "Dance", "Yes", "No", "Standing", "Punch"];
+  const idleAnims = IDLE_ANIM_NAMES
+    .map((name) => gltf.animations?.find((a: { name: string }) => a.name === name))
+    .filter(Boolean) as { name: string }[];
+  const pickRandomIdleAnim = () => idleAnims[Math.floor(Math.random() * idleAnims.length)] ?? idleClip;
 
   initialData.agentRows.forEach((row) => {
     const cfg = AGENT_CONFIG[row.agentId] ?? { ...DEFAULT_AGENT, displayName: row.name };
@@ -1324,7 +1345,7 @@ function initWorld(
 
     const isActive = row.economy.status === "healthy";
     const colors: { primary: number; glow: number } = (isActive ? AGENT_COLORS_ACTIVE : AGENT_COLORS_INACTIVE)[cfg.type as keyof typeof AGENT_COLORS_ACTIVE] ?? AGENT_COLORS_ACTIVE.Worker;
-    const clipToPlay = isActive ? idleClip : sittingClip;
+    const clipToPlay = isActive ? pickRandomIdleAnim() : sittingClip;
 
     const clone = gltf.scene.clone(true);
     clone.scale.setScalar(0.55);
@@ -1410,6 +1431,11 @@ function initWorld(
       idleClip,
       sittingClip,
       activeMixerAction,
+      wanderTarget: null,
+      wanderTimer: Math.random() * 3, // stagger initial wander
+      wanderState: "idle" as const,
+      homeX: x,
+      homeZ: z,
     });
   });
 
@@ -1473,7 +1499,53 @@ function initWorld(
     processKeys(dt);
     updateCamera();
     const b = WORLD_SIZE * 0.45;
+    const NPC_SPEED = 2.5;
+    const WANDER_RADIUS = 10;
+    const ARRIVE_DIST = 0.5;
     agentCreatures.forEach((c) => {
+      // NPC wander AI
+      c.wanderTimer -= dt;
+      if (c.wanderState === "idle" && c.wanderTimer <= 0) {
+        // Pick a random target near home position
+        const angle = Math.random() * Math.PI * 2;
+        const dist = Math.random() * WANDER_RADIUS;
+        const tx = c.homeX + Math.cos(angle) * dist;
+        const tz = c.homeZ + Math.sin(angle) * dist;
+        // Clamp to world bounds
+        const bound = WORLD_SIZE * 0.45;
+        c.wanderTarget = {
+          x: Math.max(-bound, Math.min(bound, tx)),
+          z: Math.max(-bound, Math.min(bound, tz)),
+        };
+        c.wanderState = "walking";
+        // Switch to walk animation
+        if (c.walkClip) {
+          c.activeMixerAction = fadeToAction(c.mixer, c.activeMixerAction, c.walkClip, 0.3);
+        }
+      } else if (c.wanderState === "walking" && c.wanderTarget) {
+        const dx = c.wanderTarget.x - c.x;
+        const dz = c.wanderTarget.z - c.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        if (dist < ARRIVE_DIST) {
+          // Arrived — switch to idle, wait before next wander
+          c.wanderTarget = null;
+          c.wanderState = "idle";
+          c.wanderTimer = 2 + Math.random() * 4;
+          const randomIdle = pickRandomIdleAnim();
+          if (randomIdle) {
+            c.activeMixerAction = fadeToAction(c.mixer, c.activeMixerAction, randomIdle, 0.3);
+          }
+        } else {
+          // Move towards target
+          const nx = dx / dist;
+          const nz = dz / dist;
+          c.x += nx * NPC_SPEED * dt;
+          c.z += nz * NPC_SPEED * dt;
+          c.y = H(c.x, c.z);
+          c.facing = Math.atan2(nx, nz);
+        }
+      }
+
       c.mesh.position.x = c.x;
       c.mesh.position.y = c.y;
       c.mesh.position.z = c.z;
