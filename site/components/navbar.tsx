@@ -2,23 +2,45 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu } from "lucide-react";
+import { Menu, Wallet, LogOut } from "lucide-react";
 import { useState } from "react";
+import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
+function truncateAddress(address: string) {
+  return `${address.slice(0, 6)}…${address.slice(-4)}`;
+}
+
 const NAV_LINKS = [
-  { href: "/", label: "Memories" },
-  { href: "/agents", label: "Agents" },
-  { href: "/agents/register", label: "Register Agent" },
-  { href: "/explore", label: "Skills" },
-  { href: "/docs", label: "Docs" },
+  { href: "/world", label: "World", exact: false },
+  { href: "/live", label: "Live", exact: false, live: true },
+  { href: "/economy", label: "Economy", exact: false },
+  { href: "/agents", label: "Agents", exact: false },
 ];
+
+function isActive(pathname: string, href: string, exact: boolean): boolean {
+  if (exact) return pathname === href;
+  if (href === "/") return pathname === "/";
+  return pathname === href || pathname.startsWith(href + "/");
+}
 
 export function Navbar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const { address, isConnected } = useAccount();
+  const { connect, connectors, isPending: isConnecting } = useConnect();
+  const { disconnect } = useDisconnect();
+
+  const connectWalletClass =
+    "rounded-full px-5 font-medium transition-colors hover:opacity-90";
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -37,31 +59,57 @@ export function Navbar() {
               key={link.href}
               href={link.href}
               className={cn(
-                "text-sm font-medium transition-colors hover:text-foreground",
-                pathname === link.href || (link.href !== "/" && pathname.startsWith(link.href))
+                "flex items-center gap-1.5 text-sm font-medium transition-colors hover:text-foreground",
+                isActive(pathname, link.href, link.exact)
                   ? "text-foreground underline underline-offset-4"
                   : "text-muted-foreground"
               )}
             >
+              {link.live && (
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              )}
               {link.label}
             </Link>
           ))}
         </nav>
 
         <div className="flex items-center gap-4">
-          <Button
-            asChild
-            className="hidden rounded-full px-5 md:flex"
-            size="default"
-          >
-            <a
-              href="https://github.com"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              GitHub →
-            </a>
-          </Button>
+          <div className="hidden md:block">
+            {isConnected && address ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="default"
+                    size="default"
+                    className={connectWalletClass}
+                  >
+                    <Wallet className="size-4" />
+                    {truncateAddress(address)}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={() => disconnect()}
+                  >
+                    <LogOut className="size-4" />
+                    Disconnect
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <Button
+                variant="default"
+                size="default"
+                className={connectWalletClass}
+                onClick={() => connect({ connector: connectors[0] })}
+                disabled={isConnecting}
+              >
+                <Wallet className="size-4" />
+                {isConnecting ? "Connecting…" : "Connect wallet"}
+              </Button>
+            )}
+          </div>
 
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild className="md:hidden">
@@ -77,25 +125,45 @@ export function Navbar() {
                     href={link.href}
                     onClick={() => setOpen(false)}
                     className={cn(
-                      "text-base font-medium",
-                      pathname === link.href || (link.href !== "/" && pathname.startsWith(link.href))
+                      "flex items-center gap-2 text-base font-medium",
+                      isActive(pathname, link.href, link.exact)
                         ? "text-foreground underline underline-offset-4"
                         : "text-muted-foreground"
                     )}
                   >
+                    {link.live && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    )}
                     {link.label}
                   </Link>
                 ))}
-                <Button asChild className="mt-4 rounded-full" size="default">
-                  <a
-                    href="https://github.com"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setOpen(false)}
+                {isConnected && address ? (
+                  <Button
+                    variant="outline"
+                    className="mt-4 w-full rounded-full"
+                    size="default"
+                    onClick={() => {
+                      disconnect();
+                      setOpen(false);
+                    }}
                   >
-                    GitHub →
-                  </a>
-                </Button>
+                    <LogOut className="size-4" />
+                    Disconnect
+                  </Button>
+                ) : (
+                  <Button
+                    className="mt-4 w-full rounded-full"
+                    size="default"
+                    onClick={() => {
+                      connect({ connector: connectors[0] });
+                      setOpen(false);
+                    }}
+                    disabled={isConnecting}
+                  >
+                    <Wallet className="size-4" />
+                    {isConnecting ? "Connecting…" : "Connect wallet"}
+                  </Button>
+                )}
               </nav>
             </SheetContent>
           </Sheet>

@@ -337,95 +337,33 @@ export async function fetchAgentById(
       config.reputationSubgraphUrl
     );
     if (!agent) return null;
-    // RPC fallback when reputation subgraph is not yet deployed or still indexing
-    if (agent.reputation.totalFeedback === 0 && !config.reputationSubgraphUrl) {
+    // RPC fallback when subgraph shows 0 — it may still be indexing or the query silently failed
+    if (agent.reputation.totalFeedback === 0) {
       const reputation = await fetchReputationFromRpc(
         networkId,
         config.reputationRegistry,
         BigInt(agentId)
       );
-      return { ...agent, reputation };
+      if (reputation.totalFeedback > 0) return { ...agent, reputation };
     }
     return agent;
   }
 
-  // Use subgraph when available (subgraph-only, no RPC fallback)
+  // Subgraph only — no RPC fallback
   if (config.subgraphUrl) {
-    const agent = await fetchAgentByIdFromSubgraph(
-      config.subgraphUrl,
-      config.identityRegistry,
-      agentId,
-      networkId
-    );
-    return agent ?? null;
-  }
-
-  const client = createClient(networkId);
-  const { identityRegistry, reputationRegistry } = config;
-
-  try {
-    const id = BigInt(agentId);
-
-    // Read current URI and owner directly from contract (no log scanning needed)
-    const [uri, owner] = await Promise.all([
-      client.readContract({
-        address: identityRegistry,
-        abi: IDENTITY_READ_ABI,
-        functionName: "tokenURI",
-        args: [id],
-      }),
-      client.readContract({
-        address: identityRegistry,
-        abi: IDENTITY_READ_ABI,
-        functionName: "ownerOf",
-        args: [id],
-      }),
-    ]);
-
-    const [metadata, clients] = await Promise.all([
-      fetchMetadata(uri),
-      client.readContract({
-        address: reputationRegistry,
-        abi: REPUTATION_ABI,
-        functionName: "getClients",
-        args: [id],
-      }),
-    ]);
-
-    let reputation: AgentReputation = { totalFeedback: 0, averageScore: null };
-
-    if (clients.length > 0) {
-      const summary = await client.readContract({
-        address: reputationRegistry,
-        abi: REPUTATION_ABI,
-        functionName: "getSummary",
-        args: [id, clients, "", ""],
-      });
-      // summary is { count: bigint, summaryValue: bigint, summaryValueDecimals: number }
-      const [count, summaryValue, summaryValueDecimals] = summary;
-      const total = Number(count);
-      reputation = {
-        totalFeedback: total,
-        averageScore:
-          total > 0
-            ? Number(summaryValue) / Math.pow(10, summaryValueDecimals)
-            : null,
-      };
+    try {
+      const agent = await fetchAgentByIdFromSubgraph(
+        config.subgraphUrl,
+        agentId,
+        networkId,
+        config.chain.id
+      );
+      return agent;
+    } catch (subgraphErr) {
+      console.error(`[fetchAgentById] Subgraph error for agent ${agentId} on ${networkId}:`, subgraphErr);
+      return null;
     }
-
-    return {
-      id: `${networkId}:${agentId}`,
-      agentId,
-      owner,
-      agentURI: uri,
-      blockNumber: "0",
-      metadata,
-      protocols: getProtocols(metadata),
-      networkId,
-      reputation,
-    };
-  } catch (e) {
-    console.error(`fetchAgentById(${agentId}, ${networkId}) failed:`, e);
-    return null;
   }
+
+  return null;
 }
