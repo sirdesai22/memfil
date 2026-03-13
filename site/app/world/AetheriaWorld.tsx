@@ -1192,15 +1192,14 @@ function initWorld(
   storageGroup.position.set(STORAGE_POS.x, ty, STORAGE_POS.z);
   scene.add(storageGroup);
 
-  // ── Storage carriers (small robots walking depot ↔ campfire: data retrieval) ──
-  const depotStartPos = new THREE.Vector3(STORAGE_POS.x, ty + 0.5, STORAGE_POS.z);
-  type StorageCarrier = {
-    mesh: { position: { x: number; y: number; z: number; lerpVectors: (a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }, t: number) => void }; rotation: { y: number } };
-    mixer: { update: (dt: number) => void };
-    phase: number;
-    direction: 1 | -1;
-    startPos: { x: number; y: number; z: number };
-    endPos: { x: number; y: number; z: number };
+  // ── Data-stream particles (campfire → depot: "data flowing to Filecoin") ─────
+  const STREAM_PARTICLE_COUNT = 40;
+  const depotEnd = new THREE.Vector3(STORAGE_POS.x, ty + 2, STORAGE_POS.z);
+  type DataStreamItem = {
+    points: { geometry: { attributes: { position: { count: number; array: Float32Array; needsUpdate?: boolean } } }; material: { opacity?: number } };
+    phases: number[];
+    start: { x: number; y: number; z: number };
+    end: { x: number; y: number; z: number };
   };
   const storageCarriers: StorageCarrier[] = [];
   const walkClipForCarrier = gltf.animations?.find((a: { name: string }) => a.name === "Walking") ?? null;
