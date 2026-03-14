@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * AetheriaWorld — Living World interface for the Agent Economy.
+ * AetheriaWorld — FilCraft Living World interface for the Agent Economy.
  * Three.js game world with real economy data bindings.
  */
 
@@ -340,10 +340,10 @@ export function AetheriaWorld({
               textShadow: "0 0 40px rgba(245,217,106,0.4)",
             }}
           >
-            AETHERIA
+            FILCRAFT
           </h1>
           <p className="text-[#5a4a2a] tracking-[4px] mt-2 text-xs">
-            ENTERING THE LIVING WORLD
+            ENTERING FILCRAFT
           </p>
           <div className="w-[300px] h-1 bg-[#1a1510] mt-8 rounded overflow-hidden">
             <div
@@ -369,10 +369,10 @@ export function AetheriaWorld({
               textShadow: "0 0 20px rgba(245,217,106,0.5), 0 2px 4px rgba(0,0,0,0.8)",
             }}
           >
-            Aetheria
+            FilCraft
           </h1>
           <div className="text-[10px] text-[#a89060] tracking-[4px] mt-0.5">
-            Agent Economy
+            The Living World
           </div>
         </div>
 
@@ -2122,12 +2122,12 @@ function initWorld(
     const h = econBoardCanvas.height;
     const d = dataRef.current;
 
-    // Dark background
-    ctx.fillStyle = "#050a0f";
+    // Dark background — warm parchment-dark
+    ctx.fillStyle = "#0f0a05";
     ctx.fillRect(0, 0, w, h);
 
-    // Subtle grid lines (stock-market style)
-    ctx.strokeStyle = "rgba(0,144,255,0.06)";
+    // Subtle grid lines (ledger style)
+    ctx.strokeStyle = "rgba(245,217,106,0.06)";
     ctx.lineWidth = 1;
     for (let y = 0; y < h; y += 30) {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
@@ -2142,32 +2142,32 @@ function initWorld(
       ctx.fillRect(0, y, w, 1);
     }
 
-    // Border glow
-    ctx.strokeStyle = "rgba(0,144,255,0.35)";
+    // Border glow — gold
+    ctx.strokeStyle = "rgba(245,217,106,0.35)";
     ctx.lineWidth = 3;
     ctx.strokeRect(2, 2, w - 4, h - 4);
-    ctx.strokeStyle = "rgba(245,217,106,0.15)";
+    ctx.strokeStyle = "rgba(168,144,96,0.25)";
     ctx.lineWidth = 1;
     ctx.strokeRect(6, 6, w - 12, h - 12);
 
     // ── Header bar ──
     const headerGrad = ctx.createLinearGradient(0, 0, w, 0);
-    headerGrad.addColorStop(0, "rgba(0,144,255,0.15)");
-    headerGrad.addColorStop(0.5, "rgba(0,144,255,0.25)");
-    headerGrad.addColorStop(1, "rgba(0,144,255,0.15)");
+    headerGrad.addColorStop(0, "rgba(245,217,106,0.1)");
+    headerGrad.addColorStop(0.5, "rgba(245,217,106,0.2)");
+    headerGrad.addColorStop(1, "rgba(245,217,106,0.1)");
     ctx.fillStyle = headerGrad;
     ctx.fillRect(6, 6, w - 12, 44);
 
     ctx.font = "bold 22px Cinzel, serif";
-    ctx.fillStyle = "#0090ff";
+    ctx.fillStyle = "#f5d96a";
     ctx.textAlign = "center";
-    ctx.shadowColor = "rgba(0,144,255,0.6)";
+    ctx.shadowColor = "rgba(245,217,106,0.6)";
     ctx.shadowBlur = 12;
-    ctx.fillText("AGENT ECONOMY EXCHANGE", w / 2, 36);
+    ctx.fillText("FILCRAFT EXCHANGE", w / 2, 36);
     ctx.shadowBlur = 0;
 
     // Separator
-    ctx.fillStyle = "rgba(0,144,255,0.3)";
+    ctx.fillStyle = "rgba(245,217,106,0.3)";
     ctx.fillRect(10, 54, w - 20, 1);
 
     // ── Live Stats Ticker ──
@@ -2177,7 +2177,7 @@ function initWorld(
       { label: "HEALTHY", value: String(d.summary.activeAgents), color: "#10b981" },
       { label: "AT-RISK", value: String(d.summary.atRiskAgents), color: "#f59e0b" },
       { label: "WOUND DOWN", value: String(d.summary.windDownCount), color: "#6b7280" },
-      { label: "STORAGE", value: formatTFil(d.summary.totalStorageCostWei) + " tFIL", color: "#0090ff" },
+      { label: "STORAGE", value: formatTFil(d.summary.totalStorageCostWei) + " tFIL", color: "#f5d96a" },
       { label: "REVENUE", value: "$" + formatUsd(d.summary.totalRevenueUsdCents), color: "#a78bfa" },
     ];
     const tickerSpacing = (w - 40) / stats.length;
@@ -2196,7 +2196,7 @@ function initWorld(
     });
 
     // Separator
-    ctx.fillStyle = "rgba(0,144,255,0.2)";
+    ctx.fillStyle = "rgba(245,217,106,0.2)";
     ctx.fillRect(10, tickerY + 28, w - 20, 1);
 
     // ── Agent P&L Table ──
@@ -2222,7 +2222,7 @@ function initWorld(
     ctx.fillText("STATUS", colX.status, headerRowY);
 
     // Separator
-    ctx.fillStyle = "rgba(0,144,255,0.15)";
+    ctx.fillStyle = "rgba(245,217,106,0.15)";
     ctx.fillRect(15, headerRowY + 6, w - 30, 1);
 
     // Rows
@@ -2235,7 +2235,7 @@ function initWorld(
 
       // Row background on hover effect — alternating subtle stripes
       if (idx % 2 === 0) {
-        ctx.fillStyle = "rgba(0,144,255,0.04)";
+        ctx.fillStyle = "rgba(245,217,106,0.04)";
         ctx.fillRect(15, ry - 14, w - 30, 24);
       }
 
@@ -2255,7 +2255,7 @@ function initWorld(
       ctx.fillStyle = "#a78bfa";
       ctx.fillText("$" + formatUsd(row.economy.totalEarned), colX.revenue, ry);
 
-      ctx.fillStyle = "#0090ff";
+      ctx.fillStyle = "#f5d96a";
       ctx.fillText(formatTFil(row.economy.totalSpent), colX.storage, ry);
 
       ctx.fillStyle = "#e8a030";
@@ -2274,7 +2274,7 @@ function initWorld(
     const bottomY = h - 170;
 
     // Separator
-    ctx.fillStyle = "rgba(0,144,255,0.2)";
+    ctx.fillStyle = "rgba(245,217,106,0.2)";
     ctx.fillRect(10, bottomY - 10, w - 20, 1);
 
     // ── Recent Activity (left half) ──
@@ -2287,7 +2287,7 @@ function initWorld(
     recentEvents.forEach((ev, i) => {
       const ey = bottomY + 28 + i * 24;
       const evColor = ev.type === "BudgetDeposited" ? "#10b981"
-        : ev.type === "StorageCostRecorded" ? "#0090ff"
+        : ev.type === "StorageCostRecorded" ? "#f5d96a"
         : ev.type === "RevenueRecorded" ? "#a78bfa"
         : "#6b7280";
 
@@ -2381,7 +2381,7 @@ function initWorld(
     map: econBoardTex,
     roughness: 0.15,
     metalness: 0.1,
-    emissive: 0x001122,
+    emissive: 0x221100,
     emissiveIntensity: 0.8,
     side: THREE.FrontSide,
   });
@@ -2390,8 +2390,8 @@ function initWorld(
   econScreen.position.set(0, ECON_BOARD_H / 2 + 1.5, 0);
   econBoardGroup.add(econScreen);
 
-  // Frame — dark metal border around the screen
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0x0a1420, metalness: 0.95, roughness: 0.15 });
+  // Frame — dark brass border around the screen
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x201408, metalness: 0.95, roughness: 0.15 });
   const frameThick = 0.15;
   // Top frame
   const frameTop = new THREE.Mesh(new THREE.BoxGeometry(ECON_BOARD_W + frameThick * 2, frameThick, 0.3), frameMat);
@@ -2410,14 +2410,14 @@ function initWorld(
   frameRight.position.set(ECON_BOARD_W / 2 + frameThick / 2, ECON_BOARD_H / 2 + 1.5, 0);
   econBoardGroup.add(frameRight);
 
-  // Blue LED strip along the top
-  const ledStripMat = new THREE.MeshStandardMaterial({ color: FIL_BLUE, emissive: FIL_BLUE, emissiveIntensity: 1.5, roughness: 0.2 });
+  // Gold LED strip along the top
+  const ledStripMat = new THREE.MeshStandardMaterial({ color: 0xf5d96a, emissive: 0xf5d96a, emissiveIntensity: 1.5, roughness: 0.2 });
   const ledStrip = new THREE.Mesh(new THREE.BoxGeometry(ECON_BOARD_W + 0.6, 0.08, 0.08), ledStripMat);
   ledStrip.position.set(0, ECON_BOARD_H / 2 + 1.5 + ECON_BOARD_H / 2 + frameThick + 0.06, 0);
   econBoardGroup.add(ledStrip);
 
   // Support pillars (two metal poles)
-  const pillarMat = new THREE.MeshStandardMaterial({ color: 0x1a2a3a, metalness: 0.9, roughness: 0.2 });
+  const pillarMat = new THREE.MeshStandardMaterial({ color: 0x3a2a1a, metalness: 0.9, roughness: 0.2 });
   [-1, 1].forEach((side) => {
     const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, ECON_BOARD_H / 2 + 1.5, 8), pillarMat);
     pillar.position.set(side * (ECON_BOARD_W / 2 - 0.5), (ECON_BOARD_H / 2 + 1.5) / 2, -0.1);
@@ -2426,14 +2426,14 @@ function initWorld(
   });
 
   // Spotlight illuminating the board
-  const boardSpot = new THREE.SpotLight(0x0090ff, 3, 20, Math.PI / 5);
+  const boardSpot = new THREE.SpotLight(0xf5d96a, 3, 20, Math.PI / 5);
   boardSpot.position.set(0, ECON_BOARD_H + 4, 5);
   boardSpot.target.position.set(0, ECON_BOARD_H / 2 + 1.5, 0);
   econBoardGroup.add(boardSpot);
   econBoardGroup.add(boardSpot.target);
 
   // Point light in front of screen for glow effect
-  const boardGlow = new THREE.PointLight(0x0090ff, 1.5, 12);
+  const boardGlow = new THREE.PointLight(0xf5d96a, 1.5, 12);
   boardGlow.position.set(0, ECON_BOARD_H / 2 + 1.5, 2);
   econBoardGroup.add(boardGlow);
 
@@ -2451,11 +2451,11 @@ function initWorld(
   econLabelCanvas.height = 64;
   const econLabelCtx = econLabelCanvas.getContext("2d")!;
   econLabelCtx.font = "bold 28px MedievalSharp";
-  econLabelCtx.fillStyle = "#0090ff";
+  econLabelCtx.fillStyle = "#f5d96a";
   econLabelCtx.textAlign = "center";
-  econLabelCtx.shadowColor = "rgba(0,144,255,0.6)";
+  econLabelCtx.shadowColor = "rgba(245,217,106,0.6)";
   econLabelCtx.shadowBlur = 10;
-  econLabelCtx.fillText("Economy Exchange", 256, 36);
+  econLabelCtx.fillText("FilCraft Exchange", 256, 36);
   const econLabelSprite = new THREE.Sprite(
     new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(econLabelCanvas), transparent: true, depthTest: false })
   );
