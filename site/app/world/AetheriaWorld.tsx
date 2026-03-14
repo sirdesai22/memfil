@@ -8,6 +8,9 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { IDENTITY_REGISTRY_ABI } from "@/lib/identity-registry-abi";
+import { NETWORKS, type NetworkId } from "@/lib/networks";
 import type {
   AgentEconomyAccount,
   EconomyEvent,
@@ -111,24 +114,90 @@ export function AetheriaWorld({
     tier?: string;
     artifactCount?: number;
   } | null>(null);
+  const [agentTab, setAgentTab] = useState<"overview" | "economy" | "artifacts" | "activity">("overview");
+  const [agentActivity, setAgentActivity] = useState<{ runId: string; status: string; createdAt: string; reportUrl: string; summary: string; focCid?: string }[]>([]);
+  const [agentArtifacts, setAgentArtifacts] = useState<{ id: string; category: string; priceUsdc: string; license: string; contentCid: string; active: boolean; createdAt: string }[]>([]);
+  const [tabLoading, setTabLoading] = useState(false);
+  const [showRegister, setShowRegister] = useState(false);
+  const [regNetwork, setRegNetwork] = useState<NetworkId>("filecoinCalibration");
+  const [regStep, setRegStep] = useState(1);
+  const [regCardUrl, setRegCardUrl] = useState("");
+  const [regHealthUrl, setRegHealthUrl] = useState("");
+  const [regValidating, setRegValidating] = useState(false);
+  const [regValidation, setRegValidation] = useState<{ valid: boolean; agentCard: any; health: boolean; errors: string[] } | null>(null);
+  const [regTxHash, setRegTxHash] = useState<`0x${string}` | undefined>();
+  const { writeContract: regWriteContract, isPending: regIsWriting, error: regWriteError } = useWriteContract();
+  const { isLoading: regIsConfirming, isSuccess: regIsConfirmed } = useWaitForTransactionReceipt({ hash: regTxHash });
   const router = useRouter();
+
+  const regNetworkConfig = NETWORKS[regNetwork];
+
+  async function handleRegVerify() {
+    if (!regCardUrl.trim()) return;
+    setRegValidating(true);
+    setRegValidation(null);
+    try {
+      const res = await fetch("/api/agents/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentCardUrl: regCardUrl.trim(), healthUrl: regHealthUrl.trim() || undefined }),
+      });
+      const d = await res.json();
+      setRegValidation({ valid: d.valid ?? false, agentCard: d.agentCard ?? null, health: d.health ?? false, errors: d.errors ?? [] });
+    } catch {
+      setRegValidation({ valid: false, agentCard: null, health: false, errors: ["Network error"] });
+    } finally {
+      setRegValidating(false);
+    }
+  }
+
+  function handleRegSubmit() {
+    if (!regCardUrl.trim()) return;
+    regWriteContract(
+      {
+        address: regNetworkConfig.identityRegistry,
+        abi: IDENTITY_REGISTRY_ABI,
+        functionName: "register",
+        args: [regCardUrl.trim()],
+        chainId: regNetworkConfig.chain.id,
+      },
+      { onSuccess(hash) { setRegTxHash(hash); } }
+    );
+  }
+
+  function closeRegister() {
+    setShowRegister(false);
+    setRegStep(1);
+    setRegCardUrl("");
+    setRegHealthUrl("");
+    setRegValidation(null);
+    setRegTxHash(undefined);
+  }
 
   useEffect(() => {
     if (!selectedAgentId) {
       setAgentExtra(null);
+      setAgentActivity([]);
+      setAgentArtifacts([]);
+      setAgentTab("overview");
       return;
     }
     let cancelled = false;
+    setTabLoading(true);
     Promise.all([
       fetch(`/api/agents/${selectedAgentId}/score?network=${DEFAULT_NETWORK}`).then((r) => (r.ok ? r.json() : null)),
-      fetch(`/api/data-listings?agentId=${selectedAgentId}`).then((r) => (r.ok ? r.json() : { total: 0 })),
-    ]).then(([scoreRes, listingsRes]) => {
+      fetch(`/api/data-listings?agentId=${selectedAgentId}`).then((r) => (r.ok ? r.json() : { listings: [], total: 0 })),
+      fetch(`/api/agents/${selectedAgentId}/activity`).then((r) => (r.ok ? r.json() : { reports: [] })),
+    ]).then(([scoreRes, listingsRes, activityRes]) => {
       if (cancelled) return;
       setAgentExtra({
         creditScore: scoreRes?.score,
         tier: scoreRes?.label,
         artifactCount: listingsRes?.total ?? 0,
       });
+      setAgentArtifacts(listingsRes?.listings ?? []);
+      setAgentActivity(activityRes?.reports ?? []);
+      setTabLoading(false);
     });
     return () => {
       cancelled = true;
@@ -219,11 +288,13 @@ export function AetheriaWorld({
         return Promise.all([
           loadModel(THREE as Parameters<typeof loadModel>[0], "/models/RobotExpressive.glb"),
           loadModel(THREE as Parameters<typeof loadModel>[0], "/models/CastleModel.glb"),
-        ]).then(([gltf, castleGltf]) => ({ THREE, gltf, castleGltf }));
+          loadModel(THREE as Parameters<typeof loadModel>[0], "/models/filecoin_model.glb"),
+          loadModel(THREE as Parameters<typeof loadModel>[0], "/models/furnace.glb"),
+        ]).then(([gltf, castleGltf, filecoinGltf, furnaceGltf]) => ({ THREE, gltf, castleGltf, filecoinGltf, furnaceGltf }));
       })
-      .then(({ THREE, gltf, castleGltf }) => {
+      .then(({ THREE, gltf, castleGltf, filecoinGltf, furnaceGltf }) => {
         if (cancelled) return;
-        initWorld(THREE, containerRef.current!, dataRef, setSelectedAgentId, gltf as { scene: any; animations: any[] }, castleGltf as { scene: any }, () => router.push("/marketplace"));
+        initWorld(THREE, containerRef.current!, dataRef, setSelectedAgentId, gltf as { scene: any; animations: any[] }, castleGltf as { scene: any }, filecoinGltf as { scene: any }, furnaceGltf as { scene: any }, () => router.push("/marketplace"), () => setShowRegister(true));
         setLoading(false);
         rafId = requestAnimationFrame(function loop() {
           if (cancelled) return;
@@ -584,7 +655,7 @@ export function AetheriaWorld({
           </>
         )}
 
-        {/* Agent detail dialog — in-game style */}
+        {/* Agent detail dialog — tab-based in-game style */}
         {selectedRow && selectedCfg && (
           <>
             <div
@@ -594,131 +665,738 @@ export function AetheriaWorld({
             />
             <div
               id="agent-dialog"
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-30 w-[min(420px,90vw)] pointer-events-auto"
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-30 w-[min(520px,92vw)] max-h-[85vh] pointer-events-auto flex flex-col"
               style={{ fontFamily: "MedievalSharp, cursive" }}
               role="dialog"
               aria-labelledby="agent-dialog-title"
             >
               <div
-                className="rounded-lg overflow-hidden border-2 border-[#5a4a2a]"
+                className="rounded-lg overflow-hidden border-2 border-[#5a4a2a] flex flex-col max-h-[85vh]"
                 style={{
                   background: "linear-gradient(180deg, #2a2318 0%, #1c180f 50%, #151210 100%)",
                   boxShadow: "0 0 0 1px #7a6a3a, 0 0 40px rgba(0,0,0,0.8), inset 0 0 60px rgba(90,74,42,0.08)",
                 }}
               >
-                {/* Header with close */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-[#5a4a2a]/60" style={{ background: "rgba(0,0,0,0.3)" }}>
-                  <h2 id="agent-dialog-title" className="text-[#f5d96a] font-bold text-lg tracking-wider" style={{ fontFamily: "Cinzel, serif" }}>
-                    AGENT SCRYING
-                  </h2>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedAgentId(null)}
-                    className="w-8 h-8 rounded border border-[#5a4a2a] flex items-center justify-center text-[#a89060] hover:text-[#f5d96a] hover:border-[#f5d96a] transition-colors"
-                    aria-label="Close"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                <div className="p-4 space-y-4">
-                  {/* Agent identity */}
-                  <div className="flex items-center gap-4">
+                {/* Header with agent identity + close */}
+                <div className="px-4 py-3 border-b border-[#5a4a2a]/60 shrink-0" style={{ background: "rgba(0,0,0,0.3)" }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <h2 id="agent-dialog-title" className="text-[#f5d96a] font-bold text-lg tracking-wider" style={{ fontFamily: "Cinzel, serif" }}>
+                      AGENT SCRYING
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedAgentId(null)}
+                      className="w-8 h-8 rounded border border-[#5a4a2a] flex items-center justify-center text-[#a89060] hover:text-[#f5d96a] hover:border-[#f5d96a] transition-colors"
+                      aria-label="Close"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {/* Agent identity — always visible */}
+                  <div className="flex items-center gap-3">
                     <div
-                      className="w-16 h-16 rounded-lg border-2 border-[#7a6a3a] flex items-center justify-center text-[36px] shrink-0"
+                      className="w-12 h-12 rounded-lg border-2 border-[#7a6a3a] flex items-center justify-center text-[28px] shrink-0"
                       style={{ background: `#${(selectedCfg.type === "Worker" ? 0x8a6a3a : selectedCfg.type === "Shaman" ? 0x6a3a8a : selectedCfg.type === "Warrior" ? 0x4a7a3a : 0x5a5a5a).toString(16).padStart(6, "0")}44` }}
                     >
                       {selectedCfg.emoji}
                     </div>
-                    <div>
-                      <div className="text-[#f5d96a] font-bold text-xl" style={{ fontFamily: "Cinzel, serif" }}>
+                    <div className="min-w-0">
+                      <div className="text-[#f5d96a] font-bold text-base" style={{ fontFamily: "Cinzel, serif" }}>
                         {selectedCfg.displayName}
                       </div>
-                      <div className="text-[#a89060] text-sm">
-                        {selectedCfg.type} · Agent #{selectedRow.agentId}
-                      </div>
-                      <div className="text-xs mt-0.5">
-                        <span
-                          className={
-                            selectedRow.economy.status === "healthy"
-                              ? "text-emerald-500"
-                              : selectedRow.economy.status === "at-risk"
-                              ? "text-amber-500"
-                              : "text-zinc-400"
-                          }
-                        >
-                          {selectedRow.economy.status === "healthy" ? "● Healthy" : selectedRow.economy.status === "at-risk" ? "● At Risk" : "● Wound Down"}
+                      <div className="text-[#a89060] text-xs">
+                        {selectedCfg.type} · #{selectedRow.agentId}
+                        <span className="ml-2">
+                          <span className={selectedRow.economy.status === "healthy" ? "text-emerald-500" : selectedRow.economy.status === "at-risk" ? "text-amber-500" : "text-zinc-400"}>
+                            {selectedRow.economy.status === "healthy" ? "● Healthy" : selectedRow.economy.status === "at-risk" ? "● At Risk" : "● Wound Down"}
+                          </span>
                         </span>
-                        {selectedRow.economy.windDown && <span className="text-zinc-500 ml-1">(stopped)</span>}
                       </div>
-                      {agentExtra?.tier && (
-                        <div className="text-[10px] mt-0.5">
-                          <span className="text-[#a89060]">Credit: </span>
-                          <span className="text-[#f5d96a] font-semibold">{agentExtra.tier}</span>
-                          {agentExtra.creditScore != null && (
-                            <span className="text-[#7a8a6a] ml-1">({agentExtra.creditScore})</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tab bar */}
+                <div className="flex border-b border-[#5a4a2a]/60 shrink-0" style={{ background: "rgba(0,0,0,0.2)" }}>
+                  {(["overview", "economy", "artifacts", "activity"] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setAgentTab(tab)}
+                      className="flex-1 py-2.5 text-center text-xs uppercase tracking-widest transition-all"
+                      style={{
+                        fontFamily: "Cinzel, serif",
+                        color: agentTab === tab ? "#f5d96a" : "#7a6a4a",
+                        borderBottom: agentTab === tab ? "2px solid #f5d96a" : "2px solid transparent",
+                        background: agentTab === tab ? "rgba(245,217,106,0.06)" : "transparent",
+                        textShadow: agentTab === tab ? "0 0 10px rgba(245,217,106,0.4)" : "none",
+                      }}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Tab content — scrollable */}
+                <div className="overflow-y-auto flex-1 min-h-0" style={{ scrollbarWidth: "thin", scrollbarColor: "#5a4a2a #151210" }}>
+                  <div className="p-4 space-y-4">
+
+                    {/* ── OVERVIEW TAB ── */}
+                    {agentTab === "overview" && (
+                      <>
+                        {agentExtra?.tier && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="text-[#a89060]">Credit Score:</span>
+                            <span className="text-[#f5d96a] font-semibold">{agentExtra.tier}</span>
+                            {agentExtra.creditScore != null && (
+                              <span className="text-[#7a8a6a]">({agentExtra.creditScore})</span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Stats grid */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="p-3 rounded border border-[#5a4a2a]/50" style={{ background: "rgba(0,0,0,0.25)" }}>
+                            <div className="text-[9px] text-[#a89060] uppercase tracking-wider mb-0.5">Balance</div>
+                            <div className="text-[#f5d96a] font-bold">{formatTFil(selectedRow.economy.balance)} tFIL</div>
+                            <div className="h-1.5 bg-black/50 rounded overflow-hidden mt-1">
+                              <div
+                                className="h-full bg-gradient-to-r from-[#2a5a9a] to-[#4a8adf] rounded"
+                                style={{ width: `${Math.min(100, (Number(BigInt(selectedRow.economy.balance)) / 1e18 / 0.005) * 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                          <div className="p-3 rounded border border-[#5a4a2a]/50" style={{ background: "rgba(0,0,0,0.25)" }}>
+                            <div className="text-[9px] text-[#a89060] uppercase tracking-wider mb-0.5">Completed Runs</div>
+                            <div className="text-[#f5d96a] font-bold text-lg">{selectedRow.completedRuns}</div>
+                          </div>
+                          <div className="p-3 rounded border border-[#5a4a2a]/50" style={{ background: "rgba(0,0,0,0.25)" }}>
+                            <div className="text-[9px] text-[#a89060] uppercase tracking-wider mb-0.5">Revenue (USD)</div>
+                            <div className="text-[#e8a030] font-bold">${formatUsd(selectedRow.economy.totalEarned)}</div>
+                          </div>
+                          <div className="p-3 rounded border border-[#5a4a2a]/50" style={{ background: "rgba(0,0,0,0.25)" }}>
+                            <div className="text-[9px] text-[#a89060] uppercase tracking-wider mb-0.5">Storage Cost</div>
+                            <div className="text-[#44aacc] font-bold">{formatTFil(selectedRow.economy.totalSpent)} tFIL</div>
+                          </div>
+                        </div>
+
+                        {/* Status message */}
+                        <div className="p-3 rounded border-l-2 border-[#5a4a2a]" style={{ background: "rgba(0,0,0,0.3)" }}>
+                          <p className="text-[#c0b090] text-sm italic">
+                            {selectedRow.economy.status === "healthy"
+                              ? "Running strong. Balance above minimum viable."
+                              : selectedRow.economy.status === "at-risk"
+                              ? "Balance low. Consider topping up tFIL to avoid wind-down."
+                              : "Wound down or depleted. No further runs until budget is restored."}
+                          </p>
+                        </div>
+
+                        {selectedRow.economy.lastActivity > 0 && (
+                          <div className="text-[11px] text-[#a89060]">
+                            Last activity: {new Date(selectedRow.economy.lastActivity * 1000).toLocaleString()}
+                          </div>
+                        )}
+
+                        {agentExtra?.artifactCount != null && (
+                          <div className="text-[11px] text-[#a89060]">
+                            {agentExtra.artifactCount} artifact{agentExtra.artifactCount !== 1 ? "s" : ""} on marketplace
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {/* ── ECONOMY TAB ── */}
+                    {agentTab === "economy" && (
+                      <>
+                        {/* P&L breakdown */}
+                        <div className="space-y-3">
+                          <div className="text-[9px] text-[#a89060] uppercase tracking-widest" style={{ fontFamily: "Cinzel, serif" }}>
+                            Profit & Loss
+                          </div>
+
+                          {/* Balance bar */}
+                          <div className="p-3 rounded border border-[#5a4a2a]/50" style={{ background: "rgba(0,0,0,0.25)" }}>
+                            <div className="flex justify-between items-baseline mb-1">
+                              <span className="text-[9px] text-[#a89060] uppercase tracking-wider">Current Balance</span>
+                              <span className="text-[#f5d96a] font-bold text-lg">{formatTFil(selectedRow.economy.balance)} tFIL</span>
+                            </div>
+                            <div className="h-2 bg-black/50 rounded overflow-hidden">
+                              <div
+                                className="h-full rounded"
+                                style={{
+                                  width: `${Math.min(100, (Number(BigInt(selectedRow.economy.balance)) / 1e18 / 0.005) * 100)}%`,
+                                  background: "linear-gradient(90deg, #2a5a9a, #4a8adf, #6aaaff)",
+                                  boxShadow: "0 0 8px rgba(74,138,223,0.4)",
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Revenue vs Cost comparison */}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="p-3 rounded border border-emerald-500/20" style={{ background: "rgba(16,185,129,0.05)" }}>
+                              <div className="text-[9px] text-emerald-500/70 uppercase tracking-wider mb-1">Total Revenue</div>
+                              <div className="text-emerald-400 font-bold text-lg">${formatUsd(selectedRow.economy.totalEarned)}</div>
+                              <div className="text-[9px] text-[#a89060] mt-1">USD earned</div>
+                            </div>
+                            <div className="p-3 rounded border border-blue-500/20" style={{ background: "rgba(0,144,255,0.05)" }}>
+                              <div className="text-[9px] text-blue-400/70 uppercase tracking-wider mb-1">Total Storage</div>
+                              <div className="text-blue-400 font-bold text-lg">{formatTFil(selectedRow.economy.totalSpent)}</div>
+                              <div className="text-[9px] text-[#a89060] mt-1">tFIL spent</div>
+                            </div>
+                          </div>
+
+                          {/* Key metrics */}
+                          <div className="rounded border border-[#5a4a2a]/50 overflow-hidden">
+                            <div className="px-3 py-2 border-b border-[#5a4a2a]/40" style={{ background: "rgba(0,0,0,0.2)" }}>
+                              <span className="text-[9px] text-[#a89060] uppercase tracking-widest" style={{ fontFamily: "Cinzel, serif" }}>Key Metrics</span>
+                            </div>
+                            <div className="divide-y divide-[#5a4a2a]/30">
+                              <div className="flex justify-between px-3 py-2">
+                                <span className="text-xs text-[#a89060]">Completed Runs</span>
+                                <span className="text-xs text-[#f5d96a] font-bold">{selectedRow.completedRuns}</span>
+                              </div>
+                              <div className="flex justify-between px-3 py-2">
+                                <span className="text-xs text-[#a89060]">Cost per Run</span>
+                                <span className="text-xs text-[#44aacc] font-bold">
+                                  {selectedRow.completedRuns > 0
+                                    ? (Number(BigInt(selectedRow.economy.totalSpent)) / 1e18 / selectedRow.completedRuns).toFixed(6)
+                                    : "—"} tFIL
+                                </span>
+                              </div>
+                              <div className="flex justify-between px-3 py-2">
+                                <span className="text-xs text-[#a89060]">Revenue per Run</span>
+                                <span className="text-xs text-[#e8a030] font-bold">
+                                  {selectedRow.completedRuns > 0
+                                    ? "$" + (Number(BigInt(selectedRow.economy.totalEarned)) / 100 / selectedRow.completedRuns).toFixed(2)
+                                    : "—"}
+                                </span>
+                              </div>
+                              <div className="flex justify-between px-3 py-2">
+                                <span className="text-xs text-[#a89060]">Status</span>
+                                <span className={`text-xs font-bold ${selectedRow.economy.status === "healthy" ? "text-emerald-500" : selectedRow.economy.status === "at-risk" ? "text-amber-500" : "text-zinc-400"}`}>
+                                  {selectedRow.economy.status === "healthy" ? "Healthy" : selectedRow.economy.status === "at-risk" ? "At Risk" : "Wound Down"}
+                                </span>
+                              </div>
+                              {agentExtra?.tier && (
+                                <div className="flex justify-between px-3 py-2">
+                                  <span className="text-xs text-[#a89060]">Credit Tier</span>
+                                  <span className="text-xs text-[#f5d96a] font-bold">{agentExtra.tier} {agentExtra.creditScore != null ? `(${agentExtra.creditScore})` : ""}</span>
+                                </div>
+                              )}
+                              {selectedRow.economy.lastActivity > 0 && (
+                                <div className="flex justify-between px-3 py-2">
+                                  <span className="text-xs text-[#a89060]">Last Activity</span>
+                                  <span className="text-xs text-[#c0b090]">{new Date(selectedRow.economy.lastActivity * 1000).toLocaleString()}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Agent events for this agent */}
+                          {(() => {
+                            const agentEvents = data.events.filter((e) => e.agentId === selectedRow.agentId).slice(0, 8);
+                            if (agentEvents.length === 0) return null;
+                            return (
+                              <div className="rounded border border-[#5a4a2a]/50 overflow-hidden">
+                                <div className="px-3 py-2 border-b border-[#5a4a2a]/40" style={{ background: "rgba(0,0,0,0.2)" }}>
+                                  <span className="text-[9px] text-[#a89060] uppercase tracking-widest" style={{ fontFamily: "Cinzel, serif" }}>Recent Transactions</span>
+                                </div>
+                                <div className="divide-y divide-[#5a4a2a]/30">
+                                  {agentEvents.map((ev, i) => (
+                                    <div key={i} className="px-3 py-2 flex items-start gap-2">
+                                      <span className={`text-[10px] mt-0.5 ${ev.type === "BudgetDeposited" ? "text-emerald-500" : ev.type === "StorageCostRecorded" ? "text-blue-500" : ev.type === "RevenueRecorded" ? "text-violet-400" : "text-zinc-400"}`}>
+                                        {ev.type === "BudgetDeposited" ? "+" : ev.type === "StorageCostRecorded" ? "-" : ev.type === "RevenueRecorded" ? "$" : "x"}
+                                      </span>
+                                      <div className="min-w-0 flex-1">
+                                        <div className="text-[11px] text-[#c0b090]">{eventDescription(ev)}</div>
+                                        <div className="text-[9px] text-[#7a6a4a] mt-0.5">Block #{ev.blockNumber}</div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </>
+                    )}
+
+                    {/* ── ARTIFACTS TAB ── */}
+                    {agentTab === "artifacts" && (() => {
+                      const ARTIFACT_IMAGES = [
+                        "/artifacts/FantasyBook.png",
+                        "/artifacts/MagicBook.png",
+                        "/artifacts/MEDIEVALMAGICPOTION.png",
+                      ];
+                      return (
+                        <>
+                          <div className="text-[9px] text-[#a89060] uppercase tracking-widest" style={{ fontFamily: "Cinzel, serif" }}>
+                            Data Artifacts ({agentArtifacts.length})
+                          </div>
+                          {tabLoading ? (
+                            <div className="text-center py-8 text-[#7a6a4a] text-sm">Loading artifacts...</div>
+                          ) : agentArtifacts.length === 0 ? (
+                            <div className="text-center py-8">
+                              <div className="text-[#5a4a2a] text-3xl mb-2">-</div>
+                              <div className="text-[#7a6a4a] text-sm">No artifacts listed on marketplace</div>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              {agentArtifacts.map((artifact, idx) => (
+                                <div
+                                  key={artifact.id}
+                                  className="rounded border border-[#5a4a2a]/50 overflow-hidden flex"
+                                  style={{ background: "rgba(0,0,0,0.25)" }}
+                                >
+                                  {/* Thumbnail */}
+                                  <div className="w-16 h-16 shrink-0 overflow-hidden" style={{ background: "rgba(0,0,0,0.4)" }}>
+                                    <img
+                                      src={ARTIFACT_IMAGES[idx % ARTIFACT_IMAGES.length]}
+                                      alt={`Artifact #${artifact.id}`}
+                                      className="w-full h-full object-cover opacity-80"
+                                      style={{ filter: "saturate(0.8) brightness(0.9)" }}
+                                    />
+                                  </div>
+                                  {/* Details */}
+                                  <div className="flex-1 min-w-0 px-3 py-2 flex flex-col justify-center gap-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[#f5d96a] text-xs font-bold">#{artifact.id}</span>
+                                      <span className="text-[9px] px-1.5 py-0.5 rounded border border-[#5a4a2a]/40 text-[#a89060]">{artifact.category}</span>
+                                      {artifact.active ? (
+                                        <span className="text-[9px] text-emerald-500">Active</span>
+                                      ) : (
+                                        <span className="text-[9px] text-zinc-500">Inactive</span>
+                                      )}
+                                    </div>
+                                    <div className="text-[10px] text-[#7a6a4a] font-mono truncate">
+                                      CID: {artifact.contentCid.slice(0, 20)}...
+                                    </div>
+                                    <div className="text-[9px] text-[#7a6a4a]">
+                                      {artifact.license} · {new Date(Number(artifact.createdAt) * 1000).toLocaleDateString()}
+                                    </div>
+                                  </div>
+                                  {/* Price */}
+                                  <div className="shrink-0 px-3 flex items-center">
+                                    <span className="text-[#e8a030] font-bold text-sm">${(Number(artifact.priceUsdc) / 1e6).toFixed(2)}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
                           )}
-                        </div>
-                      )}
-                      {agentExtra?.artifactCount != null && (
-                        <div className="text-[10px] mt-0.5">
-                          <span className="text-[#a89060]">{agentExtra.artifactCount} artifact{agentExtra.artifactCount !== 1 ? "s" : ""} on marketplace</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                        </>
+                      );
+                    })()}
 
-                  {/* Stats grid */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="p-3 rounded border border-[#5a4a2a]/50" style={{ background: "rgba(0,0,0,0.25)" }}>
-                      <div className="text-[9px] text-[#a89060] uppercase tracking-wider mb-0.5">Balance</div>
-                      <div className="text-[#f5d96a] font-bold">{formatTFil(selectedRow.economy.balance)} tFIL</div>
-                      <div className="h-1.5 bg-black/50 rounded overflow-hidden mt-1">
-                        <div
-                          className="h-full bg-gradient-to-r from-[#2a5a9a] to-[#4a8adf] rounded"
-                          style={{ width: `${Math.min(100, (Number(BigInt(selectedRow.economy.balance)) / 1e18 / 0.005) * 100)}%` }}
-                        />
+                    {/* ── ACTIVITY TAB ── */}
+                    {agentTab === "activity" && (
+                      <>
+                        <div className="text-[9px] text-[#a89060] uppercase tracking-widest" style={{ fontFamily: "Cinzel, serif" }}>
+                          Run History ({agentActivity.length})
+                        </div>
+                        {tabLoading ? (
+                          <div className="text-center py-8 text-[#7a6a4a] text-sm">Loading activity...</div>
+                        ) : agentActivity.length === 0 ? (
+                          <div className="text-center py-8">
+                            <div className="text-[#5a4a2a] text-3xl mb-2">-</div>
+                            <div className="text-[#7a6a4a] text-sm">No activity reports found</div>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {agentActivity.map((report, i) => (
+                              <div
+                                key={report.runId || i}
+                                className="rounded border border-[#5a4a2a]/50 overflow-hidden"
+                                style={{ background: "rgba(0,0,0,0.25)" }}
+                              >
+                                <div className="px-3 py-2.5">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className={`w-2 h-2 rounded-full shrink-0 ${report.status === "completed" ? "bg-emerald-500" : report.status === "failed" ? "bg-red-500" : "bg-amber-500"}`} />
+                                      <span className="text-[10px] text-[#a89060] uppercase tracking-wider">{report.status}</span>
+                                    </div>
+                                    <span className="text-[9px] text-[#7a6a4a]">
+                                      {new Date(report.createdAt).toLocaleString()}
+                                    </span>
+                                  </div>
+                                  {report.summary && (
+                                    <p className="text-[11px] text-[#c0b090] mt-1 leading-relaxed">
+                                      {report.summary}
+                                    </p>
+                                  )}
+                                  <div className="flex items-center gap-3 mt-2">
+                                    {report.reportUrl && (
+                                      <a
+                                        href={report.reportUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-[10px] text-[#44aacc] hover:text-[#6accee] transition-colors"
+                                      >
+                                        View Report
+                                      </a>
+                                    )}
+                                    {report.focCid && (
+                                      <span className="text-[9px] text-[#7a6a4a] font-mono">
+                                        FoC: {report.focCid.slice(0, 16)}...
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {/* Link to FilCraft — always visible */}
+                    <Link
+                      href={`/agents/${selectedRow.networkId}/${selectedRow.agentId}`}
+                      className="block w-full py-2 text-center rounded border border-[#5a4a2a] text-[#f5d96a] text-sm font-medium hover:bg-[#5a4a2a]/30 hover:border-[#f5d96a]/50 transition-colors"
+                    >
+                      View on FilCraft
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Register Agent modal — matching world medieval gold style */}
+        {showRegister && (
+          <>
+            <div
+              className="fixed inset-0 z-20 bg-black/50 pointer-events-auto"
+              onClick={closeRegister}
+              aria-hidden="true"
+            />
+            <div
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-30 w-[min(520px,92vw)] max-h-[85vh] pointer-events-auto flex flex-col"
+              style={{ fontFamily: "MedievalSharp, cursive" }}
+              role="dialog"
+              aria-labelledby="register-dialog-title"
+            >
+              <div
+                className="rounded-lg overflow-hidden border-2 border-[#5a4a2a] flex flex-col max-h-[85vh]"
+                style={{
+                  background: "linear-gradient(180deg, #2a2318 0%, #1c180f 50%, #151210 100%)",
+                  boxShadow: "0 0 0 1px #7a6a3a, 0 0 40px rgba(0,0,0,0.8), inset 0 0 60px rgba(90,74,42,0.08)",
+                }}
+              >
+                {/* Header */}
+                <div className="px-4 py-3 border-b border-[#5a4a2a]/60 shrink-0" style={{ background: "rgba(0,0,0,0.3)" }}>
+                  <div className="flex items-center justify-between">
+                    <h2 id="register-dialog-title" className="text-[#f5d96a] font-bold text-lg tracking-wider" style={{ fontFamily: "Cinzel, serif" }}>
+                      FORGE NEW AGENT
+                    </h2>
+                    <button
+                      type="button"
+                      onClick={closeRegister}
+                      className="w-8 h-8 rounded border border-[#5a4a2a] flex items-center justify-center text-[#a89060] hover:text-[#f5d96a] hover:border-[#f5d96a] transition-colors"
+                      aria-label="Close"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-[#a89060] mt-1">Register your ERC-8004 agent on-chain</p>
+                </div>
+
+                {/* Step bar */}
+                <div className="flex items-center justify-center gap-1 py-3 border-b border-[#5a4a2a]/30 shrink-0" style={{ background: "rgba(0,0,0,0.15)" }}>
+                  {[{ n: 1, label: "Network" }, { n: 2, label: "Verify" }, { n: 3, label: "Register" }].map((s) => (
+                    <button
+                      key={s.n}
+                      type="button"
+                      onClick={() => setRegStep(s.n)}
+                      className="flex items-center gap-1.5"
+                    >
+                      <span
+                        className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all"
+                        style={{
+                          background: regStep >= s.n ? "rgba(245,217,106,0.15)" : "rgba(90,74,42,0.2)",
+                          color: regStep >= s.n ? "#f5d96a" : "#5a4a2a",
+                          border: `1px solid ${regStep >= s.n ? "rgba(245,217,106,0.4)" : "rgba(90,74,42,0.3)"}`,
+                          textShadow: regStep >= s.n ? "0 0 8px rgba(245,217,106,0.3)" : "none",
+                        }}
+                      >
+                        {s.n}
+                      </span>
+                      <span className="text-[9px] uppercase tracking-wider" style={{ fontFamily: "Cinzel, serif", color: regStep >= s.n ? "#f5d96a" : "#5a4a2a" }}>
+                        {s.label}
+                      </span>
+                      {s.n < 3 && (
+                        <span className="w-6 h-px mx-1" style={{ background: regStep > s.n ? "#f5d96a" : "#2a2018" }} />
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Content — scrollable */}
+                <div className="overflow-y-auto flex-1 min-h-0" style={{ scrollbarWidth: "thin", scrollbarColor: "#5a4a2a #151210" }}>
+                  <div className="p-4 space-y-4">
+
+                    {/* Success state */}
+                    {regIsConfirmed && regTxHash ? (
+                      <div className="text-center py-6 space-y-3">
+                        <div className="text-[#f5d96a] text-4xl" style={{ textShadow: "0 0 20px rgba(245,217,106,0.5)" }}>&#10003;</div>
+                        <div className="text-[#f5d96a] font-bold text-lg" style={{ fontFamily: "Cinzel, serif" }}>Agent Forged!</div>
+                        <p className="text-[#a89060] text-sm">
+                          Your agent will appear in the directory once indexed on {regNetworkConfig.name}.
+                        </p>
+                        <div className="flex justify-center gap-3 mt-4">
+                          <a
+                            href={`${regNetworkConfig.explorerTxUrl}${regTxHash}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-4 py-2 rounded border border-[#5a4a2a] text-[#f5d96a] text-sm hover:bg-[#5a4a2a]/30 hover:border-[#f5d96a]/50 transition-colors"
+                          >
+                            View on {regNetworkConfig.explorerName}
+                          </a>
+                          <button
+                            type="button"
+                            onClick={closeRegister}
+                            className="px-4 py-2 rounded border border-[#5a4a2a] text-[#a89060] text-sm hover:bg-[#5a4a2a]/30 transition-colors"
+                          >
+                            Close
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                    <div className="p-3 rounded border border-[#5a4a2a]/50" style={{ background: "rgba(0,0,0,0.25)" }}>
-                      <div className="text-[9px] text-[#a89060] uppercase tracking-wider mb-0.5">Completed Runs</div>
-                      <div className="text-[#f5d96a] font-bold text-lg">{selectedRow.completedRuns}</div>
-                    </div>
-                    <div className="p-3 rounded border border-[#5a4a2a]/50" style={{ background: "rgba(0,0,0,0.25)" }}>
-                      <div className="text-[9px] text-[#a89060] uppercase tracking-wider mb-0.5">Revenue (USD)</div>
-                      <div className="text-[#e8a030] font-bold">${formatUsd(selectedRow.economy.totalEarned)}</div>
-                    </div>
-                    <div className="p-3 rounded border border-[#5a4a2a]/50" style={{ background: "rgba(0,0,0,0.25)" }}>
-                      <div className="text-[9px] text-[#a89060] uppercase tracking-wider mb-0.5">Storage Cost</div>
-                      <div className="text-[#44aacc] font-bold">{formatTFil(selectedRow.economy.totalSpent)} tFIL</div>
-                    </div>
+                    ) : (
+                      <>
+                        {/* Step 1: Select Network */}
+                        {regStep === 1 && (
+                          <div className="space-y-3">
+                            <div className="text-[9px] text-[#a89060] uppercase tracking-widest" style={{ fontFamily: "Cinzel, serif" }}>
+                              Choose Your Realm
+                            </div>
+                            {(Object.keys(NETWORKS) as NetworkId[]).map((id) => {
+                              const n = NETWORKS[id];
+                              const selected = regNetwork === id;
+                              const isFilecoin = id === "filecoinCalibration";
+                              return (
+                                <button
+                                  key={id}
+                                  type="button"
+                                  onClick={() => setRegNetwork(id)}
+                                  className="w-full text-left rounded border p-3 transition-all"
+                                  style={{
+                                    borderColor: selected ? "rgba(245,217,106,0.4)" : "rgba(90,74,42,0.3)",
+                                    background: selected ? "rgba(245,217,106,0.06)" : "rgba(0,0,0,0.2)",
+                                    boxShadow: selected ? "inset 0 0 20px rgba(245,217,106,0.04)" : "none",
+                                  }}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                      <span className="text-xl">{isFilecoin ? "&#127760;" : "&#x27e0;"}</span>
+                                      <div>
+                                        <div className="text-sm font-bold" style={{ color: selected ? "#f5d96a" : "#a89060" }}>
+                                          {n.name}
+                                        </div>
+                                        <div className="text-[9px] font-mono text-[#5a4a2a]">
+                                          {n.identityRegistry.slice(0, 14)}...
+                                        </div>
+                                        <div className="text-[9px] text-[#7a6a4a] mt-0.5">{n.explorerName}</div>
+                                      </div>
+                                    </div>
+                                    {selected && <span className="w-2.5 h-2.5 rounded-full bg-[#f5d96a]" style={{ boxShadow: "0 0 6px rgba(245,217,106,0.5)" }} />}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                            <button
+                              type="button"
+                              onClick={() => setRegStep(2)}
+                              className="w-full py-2.5 rounded border border-[#5a4a2a] text-[#f5d96a] text-sm font-medium hover:bg-[#5a4a2a]/30 hover:border-[#f5d96a]/50 transition-colors mt-2"
+                              style={{ fontFamily: "Cinzel, serif", textShadow: "0 0 8px rgba(245,217,106,0.3)" }}
+                            >
+                              Continue
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Step 2: Enter URLs & Verify */}
+                        {regStep === 2 && (
+                          <div className="space-y-3">
+                            <div className="text-[9px] text-[#a89060] uppercase tracking-widest" style={{ fontFamily: "Cinzel, serif" }}>
+                              Inscribe & Verify
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-xs text-[#a89060]">Agent Card URL *</label>
+                              <input
+                                type="url"
+                                placeholder="https://your-agent.vercel.app/api/agent-card"
+                                value={regCardUrl}
+                                onChange={(e) => { setRegCardUrl(e.target.value); setRegValidation(null); }}
+                                className="w-full px-3 py-2 rounded border border-[#5a4a2a]/60 bg-black/30 text-[#c0b090] text-sm font-mono placeholder:text-[#3a3020] focus:outline-none focus:border-[#f5d96a]/40"
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <label className="text-xs text-[#a89060]">
+                                Health URL <span className="text-[#5a4a2a]">(optional)</span>
+                              </label>
+                              <input
+                                type="url"
+                                placeholder="https://your-agent.vercel.app/api/health"
+                                value={regHealthUrl}
+                                onChange={(e) => { setRegHealthUrl(e.target.value); setRegValidation(null); }}
+                                className="w-full px-3 py-2 rounded border border-[#5a4a2a]/60 bg-black/30 text-[#c0b090] text-sm font-mono placeholder:text-[#3a3020] focus:outline-none focus:border-[#f5d96a]/40"
+                              />
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={handleRegVerify}
+                              disabled={!regCardUrl.trim() || regValidating}
+                              className="w-full py-2.5 rounded border border-[#5a4a2a] text-sm font-medium transition-all disabled:opacity-40"
+                              style={{
+                                color: regValidating ? "#5a4a2a" : "#e8a030",
+                                background: regValidating ? "rgba(0,0,0,0.3)" : "rgba(232,160,48,0.06)",
+                              }}
+                            >
+                              {regValidating ? "Scrying..." : "Verify Agent"}
+                            </button>
+
+                            {/* Validation results */}
+                            {regValidation && (
+                              <div
+                                className="rounded border p-3 space-y-2"
+                                style={{
+                                  borderColor: regValidation.valid ? "rgba(245,217,106,0.3)" : "rgba(239,68,68,0.3)",
+                                  background: regValidation.valid ? "rgba(245,217,106,0.04)" : "rgba(239,68,68,0.05)",
+                                }}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span style={{ color: regValidation.valid ? "#f5d96a" : "#ef4444" }}>
+                                    {regValidation.valid ? "&#10003;" : "&#10007;"}
+                                  </span>
+                                  <span className="text-sm font-bold" style={{ color: regValidation.valid ? "#f5d96a" : "#ef4444" }}>
+                                    {regValidation.valid ? "Scrying successful" : "Scrying failed"}
+                                  </span>
+                                </div>
+
+                                {regValidation.agentCard && (
+                                  <div className="mt-2 space-y-1.5 p-2 rounded border border-[#5a4a2a]/30" style={{ background: "rgba(0,0,0,0.2)" }}>
+                                    <div className="text-xs text-[#c0b090]">
+                                      <span className="text-[#7a6a4a]">Name: </span>
+                                      {regValidation.agentCard.name}
+                                    </div>
+                                    <div className="text-xs text-[#c0b090]">
+                                      <span className="text-[#7a6a4a]">Description: </span>
+                                      {regValidation.agentCard.description?.slice(0, 100)}{regValidation.agentCard.description?.length > 100 ? "..." : ""}
+                                    </div>
+                                    <div className="text-xs">
+                                      <span className="text-[#7a6a4a]">Health: </span>
+                                      <span className={regValidation.health ? "text-emerald-500" : "text-red-500"}>
+                                        {regValidation.health ? "Alive" : "Unresponsive"}
+                                      </span>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {regValidation.errors.length > 0 && (
+                                  <div className="space-y-1 mt-1">
+                                    {regValidation.errors.map((err, i) => (
+                                      <div key={i} className="text-[11px] text-red-400">- {err}</div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            <div className="flex gap-2 mt-2">
+                              <button
+                                type="button"
+                                onClick={() => setRegStep(1)}
+                                className="flex-1 py-2 rounded border border-[#5a4a2a] text-[#a89060] text-sm hover:bg-[#5a4a2a]/20 transition-colors"
+                              >
+                                Back
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setRegStep(3)}
+                                disabled={!regValidation?.valid}
+                                className="flex-1 py-2 rounded border border-[#5a4a2a] text-[#f5d96a] text-sm font-medium hover:bg-[#5a4a2a]/30 hover:border-[#f5d96a]/50 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                style={{ fontFamily: "Cinzel, serif" }}
+                              >
+                                Continue
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Step 3: Register On-Chain */}
+                        {regStep === 3 && (
+                          <div className="space-y-4">
+                            <div className="text-[9px] text-[#a89060] uppercase tracking-widest" style={{ fontFamily: "Cinzel, serif" }}>
+                              Seal the Covenant
+                            </div>
+
+                            {/* Summary */}
+                            <div className="rounded border border-[#5a4a2a]/50 overflow-hidden">
+                              <div className="px-3 py-2 border-b border-[#5a4a2a]/40" style={{ background: "rgba(0,0,0,0.2)" }}>
+                                <span className="text-[9px] text-[#a89060] uppercase tracking-widest" style={{ fontFamily: "Cinzel, serif" }}>Covenant Summary</span>
+                              </div>
+                              <div className="divide-y divide-[#5a4a2a]/30">
+                                <div className="flex justify-between px-3 py-2">
+                                  <span className="text-xs text-[#a89060]">Network</span>
+                                  <span className="text-xs text-[#f5d96a] font-bold">{regNetworkConfig.name}</span>
+                                </div>
+                                {regValidation?.agentCard?.name && (
+                                  <div className="flex justify-between px-3 py-2">
+                                    <span className="text-xs text-[#a89060]">Agent</span>
+                                    <span className="text-xs text-[#c0b090] font-bold">{regValidation.agentCard.name}</span>
+                                  </div>
+                                )}
+                                <div className="flex justify-between px-3 py-2">
+                                  <span className="text-xs text-[#a89060]">Agent Card</span>
+                                  <span className="text-[10px] text-[#7a6a4a] font-mono truncate ml-4 max-w-[250px]">{regCardUrl}</span>
+                                </div>
+                                <div className="flex justify-between px-3 py-2">
+                                  <span className="text-xs text-[#a89060]">Contract</span>
+                                  <span className="text-[10px] text-[#7a6a4a] font-mono">{regNetworkConfig.identityRegistry.slice(0, 14)}...</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={handleRegSubmit}
+                              disabled={!regValidation?.valid || regIsWriting || regIsConfirming}
+                              className="w-full py-3 rounded text-sm font-bold transition-all disabled:opacity-40"
+                              style={{
+                                fontFamily: "Cinzel, serif",
+                                background: "linear-gradient(135deg, rgba(245,217,106,0.15), rgba(232,160,48,0.1))",
+                                border: "1px solid rgba(245,217,106,0.35)",
+                                color: "#f5d96a",
+                                textShadow: "0 0 12px rgba(245,217,106,0.4)",
+                                boxShadow: "0 0 20px rgba(245,217,106,0.06), inset 0 0 15px rgba(245,217,106,0.03)",
+                              }}
+                            >
+                              {regIsWriting ? "Awaiting Seal..." : regIsConfirming ? "Forging..." : `Register on ${regNetworkConfig.name}`}
+                            </button>
+
+                            {regWriteError && (
+                              <div className="p-3 rounded border-l-2 border-red-500/40 text-[11px] text-red-400" style={{ background: "rgba(0,0,0,0.3)" }}>
+                                {regWriteError.message?.split("\n")[0]}
+                              </div>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => setRegStep(2)}
+                              className="w-full py-2 rounded border border-[#5a4a2a] text-[#a89060] text-sm hover:bg-[#5a4a2a]/20 transition-colors"
+                            >
+                              Back
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+
                   </div>
-
-                  {/* Last activity */}
-                  {selectedRow.economy.lastActivity > 0 && (
-                    <div className="text-[11px] text-[#a89060]">
-                      Last activity: {new Date(selectedRow.economy.lastActivity * 1000).toLocaleString()}
-                    </div>
-                  )}
-
-                  {/* Status message */}
-                  <div className="p-3 rounded border-l-2 border-[#5a4a2a]" style={{ background: "rgba(0,0,0,0.3)" }}>
-                    <p className="text-[#c0b090] text-sm italic">
-                      {selectedRow.economy.status === "healthy"
-                        ? "Running strong. Balance above minimum viable."
-                        : selectedRow.economy.status === "at-risk"
-                        ? "Balance low. Consider topping up tFIL to avoid wind-down."
-                        : "Wound down or depleted. No further runs until budget is restored."}
-                    </p>
-                  </div>
-
-                  {/* Link to FilCraft */}
-                  <Link
-                    href={`/agents/${selectedRow.networkId}/${selectedRow.agentId}`}
-                    className="block w-full py-2 text-center rounded border border-[#5a4a2a] text-[#f5d96a] text-sm font-medium hover:bg-[#5a4a2a]/30 hover:border-[#f5d96a]/50 transition-colors"
-                  >
-                    View on FilCraft →
-                  </Link>
                 </div>
               </div>
             </div>
@@ -766,7 +1444,10 @@ function initWorld(
   setSelectedAgentId: (id: string | null) => void,
   gltf: { scene: any; animations: any[] },
   castleGltf: { scene: any },
-  onStorageDepotClick: () => void
+  filecoinGltf: { scene: any },
+  furnaceGltf: { scene: any },
+  onStorageDepotClick: () => void,
+  onFurnaceClick: () => void
 ) {
   const initialData = dataRef.current;
   const WORLD_SIZE = 60;
@@ -910,11 +1591,11 @@ function initWorld(
     if (keys["e"]) orbit.tTheta -= 1.5 * dt;
   }
 
-  // Lighting — enhanced for atmosphere
-  scene.add(new THREE.AmbientLight(0x2a2040, 0.5));
-  const hemiLight = new THREE.HemisphereLight(0x4466aa, 0x2a4a1a, 0.4);
+  // Lighting
+  scene.add(new THREE.AmbientLight(0x3a3060, 0.8));
+  const hemiLight = new THREE.HemisphereLight(0x5577aa, 0x2a5a2a, 0.6);
   scene.add(hemiLight);
-  const dirLight = new THREE.DirectionalLight(0xffeedd, 1.3);
+  const dirLight = new THREE.DirectionalLight(0xffeedd, 1.5);
   dirLight.position.set(30, 50, 20);
   dirLight.castShadow = true;
   dirLight.shadow.mapSize.set(2048, 2048);
@@ -924,9 +1605,12 @@ function initWorld(
   dirLight.shadow.camera.bottom = -35;
   dirLight.shadow.bias = -0.0001;
   scene.add(dirLight);
-  const ml = new THREE.DirectionalLight(0x4466aa, 0.35);
+  const ml = new THREE.DirectionalLight(0x4466aa, 0.45);
   ml.position.set(-20, 40, -30);
   scene.add(ml);
+  const frontFill = new THREE.DirectionalLight(0xccaa88, 0.35);
+  frontFill.position.set(0, 30, -40);
+  scene.add(frontFill);
 
   // Terrain — higher resolution, smoother
   const terrainGeo = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, 80, 80);
@@ -1259,7 +1943,581 @@ function initWorld(
   signSprite.scale.set(3.5, 0.9, 1);
   storageGroup.add(signSprite);
   storageGroup.position.set(STORAGE_POS.x, ty, STORAGE_POS.z);
+  storageGroup.rotation.y = Math.PI; // face inward toward world center
   scene.add(storageGroup);
+
+  // ── Filecoin model hovering and spinning above the castle ──
+  const filecoinScene = filecoinGltf.scene.clone(true);
+  const filBox = new THREE.Box3().setFromObject(filecoinScene);
+  const filHeight = filBox.max.y - filBox.min.y;
+  const TARGET_FIL_HEIGHT = 2;
+  const filScale = TARGET_FIL_HEIGHT / (filHeight || 1);
+  filecoinScene.scale.setScalar(filScale);
+  filecoinScene.traverse((obj: { isMesh?: boolean; castShadow?: boolean; receiveShadow?: boolean; material?: any }) => {
+    if (obj.isMesh) {
+      obj.castShadow = true;
+      obj.receiveShadow = true;
+      if (obj.material) {
+        const oldMat = Array.isArray(obj.material) ? obj.material[0] : obj.material;
+        obj.material = oldMat.clone();
+        obj.material.color.setHex(0x0090ff);
+        obj.material.emissive = new THREE.Color(0x003366);
+        obj.material.emissiveIntensity = 0.4;
+      }
+    }
+  });
+  const filecoinGroup = new THREE.Group();
+  filecoinGroup.add(filecoinScene);
+  // Position above castle top
+  const filHoverBaseY = TARGET_CASTLE_HEIGHT + 0.5;
+  filecoinGroup.position.set(STORAGE_POS.x, ty + filHoverBaseY, STORAGE_POS.z);
+  scene.add(filecoinGroup);
+
+  // ── 3D World Status card spinning above the castle ──
+  const STATUS_CARD_W = 3.5;
+  const STATUS_CARD_H = 2;
+  const statusCardCanvas = document.createElement("canvas");
+  statusCardCanvas.width = 512;
+  statusCardCanvas.height = 292;
+
+  function renderStatusCard() {
+    const ctx = statusCardCanvas.getContext("2d")!;
+    const w = statusCardCanvas.width;
+    const h = statusCardCanvas.height;
+    const d = dataRef.current;
+
+    // Background
+    const grad = ctx.createLinearGradient(0, 0, w, h);
+    grad.addColorStop(0, "rgba(6,4,1,0.96)");
+    grad.addColorStop(1, "rgba(16,10,2,0.95)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    const r = 12;
+    ctx.moveTo(r, 0);
+    ctx.lineTo(w - r, 0);
+    ctx.quadraticCurveTo(w, 0, w, r);
+    ctx.lineTo(w, h - r);
+    ctx.quadraticCurveTo(w, h, w - r, h);
+    ctx.lineTo(r, h);
+    ctx.quadraticCurveTo(0, h, 0, h - r);
+    ctx.lineTo(0, r);
+    ctx.quadraticCurveTo(0, 0, r, 0);
+    ctx.fill();
+
+    // Border
+    ctx.strokeStyle = "rgba(180,140,40,0.45)";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Inner glow border
+    ctx.strokeStyle = "rgba(245,217,106,0.1)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    const m = 6;
+    ctx.moveTo(r + m, m);
+    ctx.lineTo(w - r - m, m);
+    ctx.quadraticCurveTo(w - m, m, w - m, r + m);
+    ctx.lineTo(w - m, h - r - m);
+    ctx.quadraticCurveTo(w - m, h - m, w - r - m, h - m);
+    ctx.lineTo(r + m, h - m);
+    ctx.quadraticCurveTo(m, h - m, m, h - r - m);
+    ctx.lineTo(m, r + m);
+    ctx.quadraticCurveTo(m, m, r + m, m);
+    ctx.stroke();
+
+    // Header line
+    ctx.fillStyle = "rgba(90,74,42,0.5)";
+    ctx.fillRect(20, 55, w - 40, 1);
+
+    // Header text
+    ctx.font = "bold 20px Cinzel, serif";
+    ctx.fillStyle = "rgba(245,217,106,0.7)";
+    ctx.textAlign = "center";
+    ctx.fillText("WORLD STATUS", w / 2, 40);
+
+    // Divider between columns
+    ctx.fillStyle = "rgba(90,74,42,0.5)";
+    ctx.fillRect(w / 2, 70, 1, 150);
+
+    // Left column — AGENTS
+    ctx.font = "bold 16px Cinzel, serif";
+    ctx.fillStyle = "#a89060";
+    ctx.fillText("AGENTS", w / 4, 90);
+
+    ctx.font = "bold 60px MedievalSharp, cursive";
+    ctx.fillStyle = "#f5d96a";
+    ctx.shadowColor = "rgba(245,217,106,0.5)";
+    ctx.shadowBlur = 15;
+    ctx.fillText(String(d.agentRows.length), w / 4, 160);
+    ctx.shadowBlur = 0;
+
+    // Agent status dots
+    const dotY = 195;
+    ctx.font = "bold 18px sans-serif";
+    ctx.fillStyle = "#10b981";
+    ctx.fillText(`● ${d.summary.activeAgents}`, w / 4 - 55, dotY);
+    ctx.fillStyle = "#f59e0b";
+    ctx.fillText(`● ${d.summary.atRiskAgents}`, w / 4, dotY);
+    ctx.fillStyle = "#6b7280";
+    ctx.fillText(`● ${d.summary.windDownCount}`, w / 4 + 55, dotY);
+
+    // Right column — STORAGE
+    ctx.font = "bold 16px Cinzel, serif";
+    ctx.fillStyle = "#a89060";
+    ctx.textAlign = "center";
+    ctx.fillText("STORAGE", (w * 3) / 4, 90);
+
+    ctx.font = "bold 40px MedievalSharp, cursive";
+    ctx.fillStyle = "#e8a030";
+    ctx.shadowColor = "rgba(232,160,48,0.4)";
+    ctx.shadowBlur = 12;
+    ctx.fillText(formatTFil(d.summary.totalStorageCostWei), (w * 3) / 4, 150);
+    ctx.shadowBlur = 0;
+
+    ctx.font = "bold 16px Cinzel, serif";
+    ctx.fillStyle = "#a89060";
+    ctx.fillText("tFIL", (w * 3) / 4, 185);
+  }
+
+  renderStatusCard();
+  const statusCardTex = new THREE.CanvasTexture(statusCardCanvas);
+  statusCardTex.needsUpdate = true;
+
+  const statusCardMat = new THREE.MeshStandardMaterial({
+    map: statusCardTex,
+    transparent: true,
+    roughness: 0.3,
+    metalness: 0.15,
+    side: THREE.DoubleSide,
+    emissive: 0x332200,
+    emissiveIntensity: 0.3,
+  });
+  const statusCardGeo = new THREE.PlaneGeometry(STATUS_CARD_W, STATUS_CARD_H);
+  const statusCardMesh = new THREE.Mesh(statusCardGeo, statusCardMat);
+
+  const statusCardGroup = new THREE.Group();
+  statusCardGroup.add(statusCardMesh);
+
+  // Position above filecoin model
+  const statusCardBaseY = TARGET_CASTLE_HEIGHT + 3;
+  statusCardGroup.position.set(STORAGE_POS.x, ty + statusCardBaseY, STORAGE_POS.z);
+  scene.add(statusCardGroup);
+
+  // Point light to illuminate the card
+  const cardLight = new THREE.PointLight(0xf5d96a, 1.5, 8);
+  cardLight.position.set(0, 0, 1.5);
+  statusCardGroup.add(cardLight);
+
+  // ── 3D Economy Board — stock-market style digital display ──────────────────
+  const ECON_BOARD_POS = { x: -18, z: -12 };
+  const ECON_BOARD_W = 12;
+  const ECON_BOARD_H = 7;
+  const econBoardCanvas = document.createElement("canvas");
+  econBoardCanvas.width = 1024;
+  econBoardCanvas.height = 600;
+
+  function renderEconBoard() {
+    const ctx = econBoardCanvas.getContext("2d")!;
+    const w = econBoardCanvas.width;
+    const h = econBoardCanvas.height;
+    const d = dataRef.current;
+
+    // Dark background
+    ctx.fillStyle = "#050a0f";
+    ctx.fillRect(0, 0, w, h);
+
+    // Subtle grid lines (stock-market style)
+    ctx.strokeStyle = "rgba(0,144,255,0.06)";
+    ctx.lineWidth = 1;
+    for (let y = 0; y < h; y += 30) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+    }
+    for (let x = 0; x < w; x += 30) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+    }
+
+    // Scanline effect
+    for (let y = 0; y < h; y += 3) {
+      ctx.fillStyle = "rgba(0,0,0,0.12)";
+      ctx.fillRect(0, y, w, 1);
+    }
+
+    // Border glow
+    ctx.strokeStyle = "rgba(0,144,255,0.35)";
+    ctx.lineWidth = 3;
+    ctx.strokeRect(2, 2, w - 4, h - 4);
+    ctx.strokeStyle = "rgba(245,217,106,0.15)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(6, 6, w - 12, h - 12);
+
+    // ── Header bar ──
+    const headerGrad = ctx.createLinearGradient(0, 0, w, 0);
+    headerGrad.addColorStop(0, "rgba(0,144,255,0.15)");
+    headerGrad.addColorStop(0.5, "rgba(0,144,255,0.25)");
+    headerGrad.addColorStop(1, "rgba(0,144,255,0.15)");
+    ctx.fillStyle = headerGrad;
+    ctx.fillRect(6, 6, w - 12, 44);
+
+    ctx.font = "bold 22px Cinzel, serif";
+    ctx.fillStyle = "#0090ff";
+    ctx.textAlign = "center";
+    ctx.shadowColor = "rgba(0,144,255,0.6)";
+    ctx.shadowBlur = 12;
+    ctx.fillText("AGENT ECONOMY EXCHANGE", w / 2, 36);
+    ctx.shadowBlur = 0;
+
+    // Separator
+    ctx.fillStyle = "rgba(0,144,255,0.3)";
+    ctx.fillRect(10, 54, w - 20, 1);
+
+    // ── Live Stats Ticker ──
+    const tickerY = 74;
+    ctx.font = "bold 13px monospace";
+    const stats = [
+      { label: "HEALTHY", value: String(d.summary.activeAgents), color: "#10b981" },
+      { label: "AT-RISK", value: String(d.summary.atRiskAgents), color: "#f59e0b" },
+      { label: "WOUND DOWN", value: String(d.summary.windDownCount), color: "#6b7280" },
+      { label: "STORAGE", value: formatTFil(d.summary.totalStorageCostWei) + " tFIL", color: "#0090ff" },
+      { label: "REVENUE", value: "$" + formatUsd(d.summary.totalRevenueUsdCents), color: "#a78bfa" },
+    ];
+    const tickerSpacing = (w - 40) / stats.length;
+    stats.forEach((s, i) => {
+      const tx = 30 + i * tickerSpacing;
+      ctx.textAlign = "left";
+      ctx.fillStyle = "rgba(160,140,100,0.7)";
+      ctx.font = "bold 10px monospace";
+      ctx.fillText(s.label, tx, tickerY - 2);
+      ctx.fillStyle = s.color;
+      ctx.font = "bold 16px monospace";
+      ctx.shadowColor = s.color;
+      ctx.shadowBlur = 6;
+      ctx.fillText(s.value, tx, tickerY + 16);
+      ctx.shadowBlur = 0;
+    });
+
+    // Separator
+    ctx.fillStyle = "rgba(0,144,255,0.2)";
+    ctx.fillRect(10, tickerY + 28, w - 20, 1);
+
+    // ── Agent P&L Table ──
+    const tableY = tickerY + 40;
+    ctx.font = "bold 11px Cinzel, serif";
+    ctx.fillStyle = "rgba(245,217,106,0.6)";
+    ctx.textAlign = "left";
+    ctx.fillText("AGENT P&L", 20, tableY);
+
+    // Column headers
+    const colX = { name: 20, runs: 240, revenue: 370, storage: 520, balance: 670, status: 830 };
+    const headerRowY = tableY + 20;
+    ctx.font = "bold 10px monospace";
+    ctx.fillStyle = "rgba(160,140,100,0.5)";
+    ctx.textAlign = "left";
+    ctx.fillText("AGENT", colX.name, headerRowY);
+    ctx.textAlign = "right";
+    ctx.fillText("RUNS", colX.runs, headerRowY);
+    ctx.fillText("REVENUE", colX.revenue, headerRowY);
+    ctx.fillText("STORAGE", colX.storage, headerRowY);
+    ctx.fillText("BALANCE", colX.balance, headerRowY);
+    ctx.textAlign = "center";
+    ctx.fillText("STATUS", colX.status, headerRowY);
+
+    // Separator
+    ctx.fillStyle = "rgba(0,144,255,0.15)";
+    ctx.fillRect(15, headerRowY + 6, w - 30, 1);
+
+    // Rows
+    const sorted = [...d.agentRows].sort((a, b) => Number(BigInt(b.economy.totalSpent) - BigInt(a.economy.totalSpent)));
+    sorted.forEach((row, idx) => {
+      const ry = headerRowY + 24 + idx * 26;
+      if (ry > h - 180) return; // don't overflow into activity section
+      const statusCol = row.economy.status === "healthy" ? "#10b981" : row.economy.status === "at-risk" ? "#f59e0b" : "#6b7280";
+      const statusLabel = row.economy.status === "healthy" ? "HEALTHY" : row.economy.status === "at-risk" ? "AT RISK" : "WOUND DN";
+
+      // Row background on hover effect — alternating subtle stripes
+      if (idx % 2 === 0) {
+        ctx.fillStyle = "rgba(0,144,255,0.04)";
+        ctx.fillRect(15, ry - 14, w - 30, 24);
+      }
+
+      ctx.font = "bold 12px monospace";
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#d4d4d8";
+      ctx.fillText(row.name, colX.name, ry);
+      ctx.fillStyle = "rgba(160,140,100,0.4)";
+      ctx.font = "10px monospace";
+      ctx.fillText(`#${row.agentId}`, colX.name + ctx.measureText(row.name).width + 8, ry);
+
+      ctx.font = "bold 12px monospace";
+      ctx.textAlign = "right";
+      ctx.fillStyle = row.completedRuns > 0 ? "#e4e4e7" : "#52525b";
+      ctx.fillText(String(row.completedRuns), colX.runs, ry);
+
+      ctx.fillStyle = "#a78bfa";
+      ctx.fillText("$" + formatUsd(row.economy.totalEarned), colX.revenue, ry);
+
+      ctx.fillStyle = "#0090ff";
+      ctx.fillText(formatTFil(row.economy.totalSpent), colX.storage, ry);
+
+      ctx.fillStyle = "#e8a030";
+      ctx.fillText(formatTFil(row.economy.balance), colX.balance, ry);
+
+      ctx.textAlign = "center";
+      ctx.fillStyle = statusCol;
+      ctx.shadowColor = statusCol;
+      ctx.shadowBlur = 4;
+      ctx.font = "bold 10px monospace";
+      ctx.fillText(statusLabel, colX.status, ry);
+      ctx.shadowBlur = 0;
+    });
+
+    // ── Bottom section: Activity + Leaderboard ──
+    const bottomY = h - 170;
+
+    // Separator
+    ctx.fillStyle = "rgba(0,144,255,0.2)";
+    ctx.fillRect(10, bottomY - 10, w - 20, 1);
+
+    // ── Recent Activity (left half) ──
+    ctx.font = "bold 11px Cinzel, serif";
+    ctx.fillStyle = "rgba(245,217,106,0.6)";
+    ctx.textAlign = "left";
+    ctx.fillText("RECENT ACTIVITY", 20, bottomY + 8);
+
+    const recentEvents = d.events.slice(0, 5);
+    recentEvents.forEach((ev, i) => {
+      const ey = bottomY + 28 + i * 24;
+      const evColor = ev.type === "BudgetDeposited" ? "#10b981"
+        : ev.type === "StorageCostRecorded" ? "#0090ff"
+        : ev.type === "RevenueRecorded" ? "#a78bfa"
+        : "#6b7280";
+
+      // Event indicator dot
+      ctx.fillStyle = evColor;
+      ctx.shadowColor = evColor;
+      ctx.shadowBlur = 4;
+      ctx.beginPath();
+      ctx.arc(28, ey - 4, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      ctx.font = "11px monospace";
+      ctx.fillStyle = "#a1a1aa";
+      ctx.textAlign = "left";
+      const desc = eventDescription(ev);
+      ctx.fillText(desc.length > 50 ? desc.slice(0, 50) + "..." : desc, 40, ey);
+
+      // Block number
+      ctx.font = "9px monospace";
+      ctx.fillStyle = "rgba(100,100,120,0.5)";
+      ctx.fillText(`#${ev.blockNumber}`, 40 + Math.min(ctx.measureText(desc).width + 10, w / 2 - 80), ey);
+    });
+
+    // ── Storage Leaderboard (right half) ──
+    const lbX = w / 2 + 20;
+    ctx.font = "bold 11px Cinzel, serif";
+    ctx.fillStyle = "rgba(245,217,106,0.6)";
+    ctx.textAlign = "left";
+    ctx.fillText("STORAGE LEADERBOARD", lbX, bottomY + 8);
+
+    const leaderboard = [...d.agentRows]
+      .sort((a, b) => Number(BigInt(b.economy.totalSpent) - BigInt(a.economy.totalSpent)))
+      .slice(0, 5);
+    leaderboard.forEach((row, rank) => {
+      const ly = bottomY + 28 + rank * 24;
+      const statusCol = row.economy.status === "healthy" ? "#10b981" : row.economy.status === "at-risk" ? "#f59e0b" : "#6b7280";
+
+      // Rank
+      ctx.font = "bold 18px monospace";
+      ctx.fillStyle = "rgba(100,100,120,0.3)";
+      ctx.textAlign = "left";
+      ctx.fillText(String(rank + 1), lbX, ly + 2);
+
+      // Name
+      ctx.font = "bold 12px monospace";
+      ctx.fillStyle = "#d4d4d8";
+      ctx.fillText(row.name, lbX + 28, ly);
+
+      // Cost + status
+      ctx.textAlign = "right";
+      ctx.fillStyle = statusCol;
+      ctx.font = "bold 12px monospace";
+      ctx.shadowColor = statusCol;
+      ctx.shadowBlur = 4;
+      ctx.fillText(formatTFil(row.economy.totalSpent) + " tFIL", w - 20, ly);
+      ctx.shadowBlur = 0;
+
+      ctx.fillStyle = "rgba(100,100,120,0.4)";
+      ctx.font = "9px monospace";
+      ctx.fillText(row.economy.status, w - 20, ly + 14);
+    });
+
+    // ── Timestamp ──
+    ctx.font = "9px monospace";
+    ctx.fillStyle = "rgba(100,100,120,0.4)";
+    ctx.textAlign = "right";
+    ctx.fillText("LIVE  " + new Date(d.fetchedAt).toLocaleTimeString(), w - 15, h - 10);
+
+    // Blinking dot
+    if (Math.floor(Date.now() / 500) % 2 === 0) {
+      ctx.fillStyle = "#10b981";
+      ctx.shadowColor = "#10b981";
+      ctx.shadowBlur = 6;
+      ctx.beginPath();
+      ctx.arc(w - ctx.measureText("LIVE  " + new Date(d.fetchedAt).toLocaleTimeString()).width - 22, h - 14, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+  }
+
+  renderEconBoard();
+  const econBoardTex = new THREE.CanvasTexture(econBoardCanvas);
+  econBoardTex.needsUpdate = true;
+
+  const econBoardGroup = new THREE.Group();
+  const econBoardY = H(ECON_BOARD_POS.x, ECON_BOARD_POS.z);
+
+  // Board screen
+  const econScreenMat = new THREE.MeshStandardMaterial({
+    map: econBoardTex,
+    roughness: 0.15,
+    metalness: 0.1,
+    emissive: 0x001122,
+    emissiveIntensity: 0.8,
+    side: THREE.FrontSide,
+  });
+  const econScreenGeo = new THREE.PlaneGeometry(ECON_BOARD_W, ECON_BOARD_H);
+  const econScreen = new THREE.Mesh(econScreenGeo, econScreenMat);
+  econScreen.position.set(0, ECON_BOARD_H / 2 + 1.5, 0);
+  econBoardGroup.add(econScreen);
+
+  // Frame — dark metal border around the screen
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x0a1420, metalness: 0.95, roughness: 0.15 });
+  const frameThick = 0.15;
+  // Top frame
+  const frameTop = new THREE.Mesh(new THREE.BoxGeometry(ECON_BOARD_W + frameThick * 2, frameThick, 0.3), frameMat);
+  frameTop.position.set(0, ECON_BOARD_H / 2 + 1.5 + ECON_BOARD_H / 2 + frameThick / 2, 0);
+  econBoardGroup.add(frameTop);
+  // Bottom frame
+  const frameBot = new THREE.Mesh(new THREE.BoxGeometry(ECON_BOARD_W + frameThick * 2, frameThick, 0.3), frameMat);
+  frameBot.position.set(0, ECON_BOARD_H / 2 + 1.5 - ECON_BOARD_H / 2 - frameThick / 2, 0);
+  econBoardGroup.add(frameBot);
+  // Left frame
+  const frameLeft = new THREE.Mesh(new THREE.BoxGeometry(frameThick, ECON_BOARD_H + frameThick * 2, 0.3), frameMat);
+  frameLeft.position.set(-ECON_BOARD_W / 2 - frameThick / 2, ECON_BOARD_H / 2 + 1.5, 0);
+  econBoardGroup.add(frameLeft);
+  // Right frame
+  const frameRight = new THREE.Mesh(new THREE.BoxGeometry(frameThick, ECON_BOARD_H + frameThick * 2, 0.3), frameMat);
+  frameRight.position.set(ECON_BOARD_W / 2 + frameThick / 2, ECON_BOARD_H / 2 + 1.5, 0);
+  econBoardGroup.add(frameRight);
+
+  // Blue LED strip along the top
+  const ledStripMat = new THREE.MeshStandardMaterial({ color: FIL_BLUE, emissive: FIL_BLUE, emissiveIntensity: 1.5, roughness: 0.2 });
+  const ledStrip = new THREE.Mesh(new THREE.BoxGeometry(ECON_BOARD_W + 0.6, 0.08, 0.08), ledStripMat);
+  ledStrip.position.set(0, ECON_BOARD_H / 2 + 1.5 + ECON_BOARD_H / 2 + frameThick + 0.06, 0);
+  econBoardGroup.add(ledStrip);
+
+  // Support pillars (two metal poles)
+  const pillarMat = new THREE.MeshStandardMaterial({ color: 0x1a2a3a, metalness: 0.9, roughness: 0.2 });
+  [-1, 1].forEach((side) => {
+    const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, ECON_BOARD_H / 2 + 1.5, 8), pillarMat);
+    pillar.position.set(side * (ECON_BOARD_W / 2 - 0.5), (ECON_BOARD_H / 2 + 1.5) / 2, -0.1);
+    pillar.castShadow = true;
+    econBoardGroup.add(pillar);
+  });
+
+  // Spotlight illuminating the board
+  const boardSpot = new THREE.SpotLight(0x0090ff, 3, 20, Math.PI / 5);
+  boardSpot.position.set(0, ECON_BOARD_H + 4, 5);
+  boardSpot.target.position.set(0, ECON_BOARD_H / 2 + 1.5, 0);
+  econBoardGroup.add(boardSpot);
+  econBoardGroup.add(boardSpot.target);
+
+  // Point light in front of screen for glow effect
+  const boardGlow = new THREE.PointLight(0x0090ff, 1.5, 12);
+  boardGlow.position.set(0, ECON_BOARD_H / 2 + 1.5, 2);
+  econBoardGroup.add(boardGlow);
+
+  // Position and rotate to face the center of the world
+  econBoardGroup.position.set(ECON_BOARD_POS.x, econBoardY, ECON_BOARD_POS.z);
+  econBoardGroup.rotation.y = Math.atan2(-ECON_BOARD_POS.x, -ECON_BOARD_POS.z); // face center
+  econBoardGroup.traverse((obj: { isMesh?: boolean; castShadow?: boolean; receiveShadow?: boolean }) => {
+    if (obj.isMesh) { obj.castShadow = true; obj.receiveShadow = true; }
+  });
+  scene.add(econBoardGroup);
+
+  // Label sprite above the board
+  const econLabelCanvas = document.createElement("canvas");
+  econLabelCanvas.width = 512;
+  econLabelCanvas.height = 64;
+  const econLabelCtx = econLabelCanvas.getContext("2d")!;
+  econLabelCtx.font = "bold 28px MedievalSharp";
+  econLabelCtx.fillStyle = "#0090ff";
+  econLabelCtx.textAlign = "center";
+  econLabelCtx.shadowColor = "rgba(0,144,255,0.6)";
+  econLabelCtx.shadowBlur = 10;
+  econLabelCtx.fillText("Economy Exchange", 256, 36);
+  const econLabelSprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(econLabelCanvas), transparent: true, depthTest: false })
+  );
+  econLabelSprite.position.set(0, ECON_BOARD_H + 2.5, 0);
+  econLabelSprite.scale.set(8, 1.5, 1);
+  econBoardGroup.add(econLabelSprite);
+
+  // ── Furnace — Register Agent station ────────────────────────────────────────
+  const FURNACE_POS = { x: 20, z: -18 };
+  const furnaceScene = furnaceGltf.scene.clone(true);
+  const furnaceBox = new THREE.Box3().setFromObject(furnaceScene);
+  const furnaceHeight = furnaceBox.max.y - furnaceBox.min.y;
+  const TARGET_FURNACE_HEIGHT = 3;
+  const furnaceScale = TARGET_FURNACE_HEIGHT / (furnaceHeight || 1);
+  furnaceScene.scale.setScalar(furnaceScale);
+  furnaceScene.traverse((obj: { isMesh?: boolean; castShadow?: boolean; receiveShadow?: boolean }) => {
+    if (obj.isMesh) { obj.castShadow = true; obj.receiveShadow = true; }
+  });
+  const furnaceGroup = new THREE.Group();
+  furnaceGroup.add(furnaceScene);
+  const furnaceY = H(FURNACE_POS.x, FURNACE_POS.z);
+  // Sit flush on terrain
+  const furnaceBox2 = new THREE.Box3().setFromObject(furnaceScene);
+  furnaceScene.position.y = -furnaceBox2.min.y;
+  furnaceGroup.position.set(FURNACE_POS.x, furnaceY, FURNACE_POS.z);
+  furnaceGroup.rotation.y = Math.atan2(-FURNACE_POS.x, -FURNACE_POS.z); // face inward toward world center
+  scene.add(furnaceGroup);
+
+  // Glow ring under the furnace
+  const furnaceRing = new THREE.Mesh(
+    new THREE.RingGeometry(1.8, 2.2, 48).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.4, side: THREE.DoubleSide })
+  );
+  furnaceRing.position.set(FURNACE_POS.x, furnaceY + 0.05, FURNACE_POS.z);
+  scene.add(furnaceRing);
+
+  // Label above furnace
+  const furnaceLabelCanvas = document.createElement("canvas");
+  furnaceLabelCanvas.width = 512;
+  furnaceLabelCanvas.height = 96;
+  const furnaceLabelCtx = furnaceLabelCanvas.getContext("2d")!;
+  furnaceLabelCtx.font = "bold 32px MedievalSharp";
+  furnaceLabelCtx.fillStyle = "#10b981";
+  furnaceLabelCtx.textAlign = "center";
+  furnaceLabelCtx.shadowColor = "rgba(16,185,129,0.6)";
+  furnaceLabelCtx.shadowBlur = 10;
+  furnaceLabelCtx.fillText("Register Agent", 256, 40);
+  furnaceLabelCtx.font = "18px MedievalSharp";
+  furnaceLabelCtx.fillStyle = "#a89060";
+  furnaceLabelCtx.shadowBlur = 0;
+  furnaceLabelCtx.fillText("Click to register", 256, 70);
+  const furnaceLabelSprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(furnaceLabelCanvas), transparent: true, depthTest: false })
+  );
+  furnaceLabelSprite.position.set(FURNACE_POS.x, furnaceY + TARGET_FURNACE_HEIGHT + 1.5, FURNACE_POS.z);
+  furnaceLabelSprite.scale.set(6, 1.2, 1);
+  scene.add(furnaceLabelSprite);
+
+  // Point light for the furnace
+  const furnaceLight = new THREE.PointLight(0x10b981, 2, 10);
+  furnaceLight.position.set(FURNACE_POS.x, furnaceY + 2, FURNACE_POS.z);
+  scene.add(furnaceLight);
 
   // ── Data-stream particles (campfire → depot: "data flowing to Filecoin") ─────
   const STREAM_PARTICLE_COUNT = 40;
@@ -1486,9 +2744,9 @@ function initWorld(
     ls.position.y = 2.2; // above robot head (model scaled 0.55)
     ls.scale.set(3, 0.75, 1);
     g.add(ls);
-    // Healthy agent glow — emerald ring at feet
+    // Healthy agent glow — emerald ring hovering above head
     const healthGlow = new THREE.Mesh(
-      new THREE.RingGeometry(0.6, 0.95, 32).rotateX(-Math.PI / 2),
+      new THREE.RingGeometry(0.4, 0.65, 32).rotateX(-Math.PI / 2),
       new THREE.MeshBasicMaterial({
         color: 0x10b981,
         transparent: true,
@@ -1497,7 +2755,7 @@ function initWorld(
         depthWrite: false,
       })
     );
-    healthGlow.position.y = 0.02;
+    healthGlow.position.y = 2.6;
     healthGlow.visible = row.economy.status === "healthy";
     g.add(healthGlow);
     g.position.set(x, y, z);
@@ -1547,6 +2805,11 @@ function initWorld(
     mVec.x = (e.clientX / window.innerWidth) * 2 - 1;
     mVec.y = -(e.clientY / window.innerHeight) * 2 + 1;
     ray.setFromCamera(mVec, camera);
+    const furnaceHits = ray.intersectObject(furnaceGroup, true);
+    if (furnaceHits.length > 0) {
+      onFurnaceClick();
+      return;
+    }
     const storageHits = ray.intersectObject(storageGroup, true);
     if (storageHits.length > 0) {
       onStorageDepotClick();
@@ -1732,6 +2995,28 @@ function initWorld(
     }
     const sgUd = (storageGroup as { userData: { beaconLight?: { intensity: number } } }).userData;
     if (sgUd.beaconLight) sgUd.beaconLight.intensity = 1.2 + Math.sin(now * 0.008) * 0.6;
+
+    // Furnace: static position, ring pulse + light flicker only
+    furnaceRing.material.opacity = 0.25 + Math.sin(now * 0.003) * 0.15;
+    furnaceRing.rotation.y = now * 0.0005;
+    furnaceLight.intensity = 1.5 + Math.sin(now * 0.004) * 0.5;
+
+    // Filecoin model: hover bob + spin
+    filecoinGroup.rotation.y += dt * 1.2;
+    filecoinGroup.position.y = ty + filHoverBaseY + Math.sin(now * 0.002) * 0.5;
+
+    // 3D World Status card: slow spin + gentle hover
+    statusCardGroup.rotation.y += dt * 0.6;
+    statusCardGroup.position.y = ty + statusCardBaseY + Math.sin(now * 0.0015 + 1) * 0.35;
+
+    // Update status card & economy board textures periodically
+    if (Math.floor(now / 2000) !== Math.floor((now - dt * 1000) / 2000)) {
+      renderStatusCard();
+      statusCardTex.needsUpdate = true;
+      renderEconBoard();
+      econBoardTex.needsUpdate = true;
+    }
+
     renderer.render(scene, camera);
   }
 
