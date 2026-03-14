@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * AetheriaWorld — Living World interface for the Agent Economy.
+ * AetheriaWorld — FilCraft Living World interface for the Agent Economy.
  * Three.js game world with real economy data bindings.
  */
 
@@ -340,10 +340,10 @@ export function AetheriaWorld({
               textShadow: "0 0 40px rgba(245,217,106,0.4)",
             }}
           >
-            AETHERIA
+            FILCRAFT
           </h1>
           <p className="text-[#5a4a2a] tracking-[4px] mt-2 text-xs">
-            ENTERING THE LIVING WORLD
+            ENTERING FILCRAFT
           </p>
           <div className="w-[300px] h-1 bg-[#1a1510] mt-8 rounded overflow-hidden">
             <div
@@ -369,10 +369,10 @@ export function AetheriaWorld({
               textShadow: "0 0 20px rgba(245,217,106,0.5), 0 2px 4px rgba(0,0,0,0.8)",
             }}
           >
-            Aetheria
+            FilCraft
           </h1>
           <div className="text-[10px] text-[#a89060] tracking-[4px] mt-0.5">
-            Agent Economy
+            The Living World
           </div>
         </div>
 
@@ -2005,13 +2005,13 @@ function initWorld(
     ctx.fill();
 
     // Border
-    ctx.strokeStyle = "rgba(180,140,40,0.45)";
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(180,140,40,0.55)";
+    ctx.lineWidth = 5;
     ctx.stroke();
 
     // Inner glow border
-    ctx.strokeStyle = "rgba(245,217,106,0.1)";
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(245,217,106,0.15)";
+    ctx.lineWidth = 2;
     ctx.beginPath();
     const m = 6;
     ctx.moveTo(r + m, m);
@@ -2027,56 +2027,56 @@ function initWorld(
 
     // Header line
     ctx.fillStyle = "rgba(90,74,42,0.5)";
-    ctx.fillRect(20, 55, w - 40, 1);
+    ctx.fillRect(20, 62, w - 40, 1);
 
     // Header text
-    ctx.font = "bold 20px Cinzel, serif";
+    ctx.font = "bold 26px Cinzel, serif";
     ctx.fillStyle = "rgba(245,217,106,0.7)";
     ctx.textAlign = "center";
-    ctx.fillText("WORLD STATUS", w / 2, 40);
+    ctx.fillText("WORLD STATUS", w / 2, 44);
 
     // Divider between columns
     ctx.fillStyle = "rgba(90,74,42,0.5)";
-    ctx.fillRect(w / 2, 70, 1, 150);
+    ctx.fillRect(w / 2, 72, 1, 168);
 
     // Left column — AGENTS
-    ctx.font = "bold 16px Cinzel, serif";
+    ctx.font = "bold 21px Cinzel, serif";
     ctx.fillStyle = "#a89060";
-    ctx.fillText("AGENTS", w / 4, 90);
+    ctx.fillText("AGENTS", w / 4, 96);
 
-    ctx.font = "bold 60px MedievalSharp, cursive";
+    ctx.font = "bold 68px MedievalSharp, cursive";
     ctx.fillStyle = "#f5d96a";
     ctx.shadowColor = "rgba(245,217,106,0.5)";
     ctx.shadowBlur = 15;
-    ctx.fillText(String(d.agentRows.length), w / 4, 160);
+    ctx.fillText(String(d.agentRows.length), w / 4, 168);
     ctx.shadowBlur = 0;
 
     // Agent status dots
-    const dotY = 195;
-    ctx.font = "bold 18px sans-serif";
+    const dotY = 210;
+    ctx.font = "bold 22px sans-serif";
     ctx.fillStyle = "#10b981";
-    ctx.fillText(`● ${d.summary.activeAgents}`, w / 4 - 55, dotY);
+    ctx.fillText(`● ${d.summary.activeAgents}`, w / 4 - 58, dotY);
     ctx.fillStyle = "#f59e0b";
     ctx.fillText(`● ${d.summary.atRiskAgents}`, w / 4, dotY);
     ctx.fillStyle = "#6b7280";
-    ctx.fillText(`● ${d.summary.windDownCount}`, w / 4 + 55, dotY);
+    ctx.fillText(`● ${d.summary.windDownCount}`, w / 4 + 58, dotY);
 
     // Right column — STORAGE
-    ctx.font = "bold 16px Cinzel, serif";
+    ctx.font = "bold 21px Cinzel, serif";
     ctx.fillStyle = "#a89060";
     ctx.textAlign = "center";
-    ctx.fillText("STORAGE", (w * 3) / 4, 90);
+    ctx.fillText("STORAGE", (w * 3) / 4, 96);
 
-    ctx.font = "bold 40px MedievalSharp, cursive";
+    ctx.font = "bold 48px MedievalSharp, cursive";
     ctx.fillStyle = "#e8a030";
     ctx.shadowColor = "rgba(232,160,48,0.4)";
     ctx.shadowBlur = 12;
-    ctx.fillText(formatTFil(d.summary.totalStorageCostWei), (w * 3) / 4, 150);
+    ctx.fillText(formatTFil(d.summary.totalStorageCostWei), (w * 3) / 4, 158);
     ctx.shadowBlur = 0;
 
-    ctx.font = "bold 16px Cinzel, serif";
+    ctx.font = "bold 20px Cinzel, serif";
     ctx.fillStyle = "#a89060";
-    ctx.fillText("tFIL", (w * 3) / 4, 185);
+    ctx.fillText("tFIL", (w * 3) / 4, 196);
   }
 
   renderStatusCard();
@@ -2122,12 +2122,12 @@ function initWorld(
     const h = econBoardCanvas.height;
     const d = dataRef.current;
 
-    // Dark background
-    ctx.fillStyle = "#050a0f";
+    // Dark background — warm parchment-dark
+    ctx.fillStyle = "#0f0a05";
     ctx.fillRect(0, 0, w, h);
 
-    // Subtle grid lines (stock-market style)
-    ctx.strokeStyle = "rgba(0,144,255,0.06)";
+    // Subtle grid lines (ledger style)
+    ctx.strokeStyle = "rgba(245,217,106,0.06)";
     ctx.lineWidth = 1;
     for (let y = 0; y < h; y += 30) {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
@@ -2142,32 +2142,32 @@ function initWorld(
       ctx.fillRect(0, y, w, 1);
     }
 
-    // Border glow
-    ctx.strokeStyle = "rgba(0,144,255,0.35)";
-    ctx.lineWidth = 3;
+    // Border glow — gold
+    ctx.strokeStyle = "rgba(245,217,106,0.5)";
+    ctx.lineWidth = 5;
     ctx.strokeRect(2, 2, w - 4, h - 4);
-    ctx.strokeStyle = "rgba(245,217,106,0.15)";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(6, 6, w - 12, h - 12);
+    ctx.strokeStyle = "rgba(168,144,96,0.35)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(8, 8, w - 16, h - 16);
 
     // ── Header bar ──
     const headerGrad = ctx.createLinearGradient(0, 0, w, 0);
-    headerGrad.addColorStop(0, "rgba(0,144,255,0.15)");
-    headerGrad.addColorStop(0.5, "rgba(0,144,255,0.25)");
-    headerGrad.addColorStop(1, "rgba(0,144,255,0.15)");
+    headerGrad.addColorStop(0, "rgba(245,217,106,0.1)");
+    headerGrad.addColorStop(0.5, "rgba(245,217,106,0.2)");
+    headerGrad.addColorStop(1, "rgba(245,217,106,0.1)");
     ctx.fillStyle = headerGrad;
     ctx.fillRect(6, 6, w - 12, 44);
 
-    ctx.font = "bold 22px Cinzel, serif";
-    ctx.fillStyle = "#0090ff";
+    ctx.font = "bold 28px Cinzel, serif";
+    ctx.fillStyle = "#f5d96a";
     ctx.textAlign = "center";
-    ctx.shadowColor = "rgba(0,144,255,0.6)";
-    ctx.shadowBlur = 12;
-    ctx.fillText("AGENT ECONOMY EXCHANGE", w / 2, 36);
+    ctx.shadowColor = "rgba(245,217,106,0.6)";
+    ctx.shadowBlur = 14;
+    ctx.fillText("FILCRAFT EXCHANGE", w / 2, 38);
     ctx.shadowBlur = 0;
 
     // Separator
-    ctx.fillStyle = "rgba(0,144,255,0.3)";
+    ctx.fillStyle = "rgba(245,217,106,0.3)";
     ctx.fillRect(10, 54, w - 20, 1);
 
     // ── Live Stats Ticker ──
@@ -2177,7 +2177,7 @@ function initWorld(
       { label: "HEALTHY", value: String(d.summary.activeAgents), color: "#10b981" },
       { label: "AT-RISK", value: String(d.summary.atRiskAgents), color: "#f59e0b" },
       { label: "WOUND DOWN", value: String(d.summary.windDownCount), color: "#6b7280" },
-      { label: "STORAGE", value: formatTFil(d.summary.totalStorageCostWei) + " tFIL", color: "#0090ff" },
+      { label: "STORAGE", value: formatTFil(d.summary.totalStorageCostWei) + " tFIL", color: "#f5d96a" },
       { label: "REVENUE", value: "$" + formatUsd(d.summary.totalRevenueUsdCents), color: "#a78bfa" },
     ];
     const tickerSpacing = (w - 40) / stats.length;
@@ -2185,31 +2185,31 @@ function initWorld(
       const tx = 30 + i * tickerSpacing;
       ctx.textAlign = "left";
       ctx.fillStyle = "rgba(160,140,100,0.7)";
-      ctx.font = "bold 10px monospace";
+      ctx.font = "bold 13px monospace";
       ctx.fillText(s.label, tx, tickerY - 2);
       ctx.fillStyle = s.color;
-      ctx.font = "bold 16px monospace";
+      ctx.font = "bold 20px monospace";
       ctx.shadowColor = s.color;
-      ctx.shadowBlur = 6;
-      ctx.fillText(s.value, tx, tickerY + 16);
+      ctx.shadowBlur = 8;
+      ctx.fillText(s.value, tx, tickerY + 20);
       ctx.shadowBlur = 0;
     });
 
     // Separator
-    ctx.fillStyle = "rgba(0,144,255,0.2)";
-    ctx.fillRect(10, tickerY + 28, w - 20, 1);
+    ctx.fillStyle = "rgba(245,217,106,0.2)";
+    ctx.fillRect(10, tickerY + 34, w - 20, 1);
 
     // ── Agent P&L Table ──
-    const tableY = tickerY + 40;
-    ctx.font = "bold 11px Cinzel, serif";
+    const tableY = tickerY + 48;
+    ctx.font = "bold 15px Cinzel, serif";
     ctx.fillStyle = "rgba(245,217,106,0.6)";
     ctx.textAlign = "left";
     ctx.fillText("AGENT P&L", 20, tableY);
 
     // Column headers
-    const colX = { name: 20, runs: 240, revenue: 370, storage: 520, balance: 670, status: 830 };
-    const headerRowY = tableY + 20;
-    ctx.font = "bold 10px monospace";
+    const colX = { name: 20, runs: 240, revenue: 380, storage: 530, balance: 680, status: 840 };
+    const headerRowY = tableY + 22;
+    ctx.font = "bold 13px monospace";
     ctx.fillStyle = "rgba(160,140,100,0.5)";
     ctx.textAlign = "left";
     ctx.fillText("AGENT", colX.name, headerRowY);
@@ -2222,32 +2222,32 @@ function initWorld(
     ctx.fillText("STATUS", colX.status, headerRowY);
 
     // Separator
-    ctx.fillStyle = "rgba(0,144,255,0.15)";
-    ctx.fillRect(15, headerRowY + 6, w - 30, 1);
+    ctx.fillStyle = "rgba(245,217,106,0.15)";
+    ctx.fillRect(15, headerRowY + 8, w - 30, 1);
 
     // Rows
     const sorted = [...d.agentRows].sort((a, b) => Number(BigInt(b.economy.totalSpent) - BigInt(a.economy.totalSpent)));
     sorted.forEach((row, idx) => {
-      const ry = headerRowY + 24 + idx * 26;
-      if (ry > h - 180) return; // don't overflow into activity section
+      const ry = headerRowY + 28 + idx * 32;
+      if (ry > h - 200) return; // don't overflow into activity section
       const statusCol = row.economy.status === "healthy" ? "#10b981" : row.economy.status === "at-risk" ? "#f59e0b" : "#6b7280";
       const statusLabel = row.economy.status === "healthy" ? "HEALTHY" : row.economy.status === "at-risk" ? "AT RISK" : "WOUND DN";
 
-      // Row background on hover effect — alternating subtle stripes
+      // Alternating row stripes
       if (idx % 2 === 0) {
-        ctx.fillStyle = "rgba(0,144,255,0.04)";
-        ctx.fillRect(15, ry - 14, w - 30, 24);
+        ctx.fillStyle = "rgba(245,217,106,0.04)";
+        ctx.fillRect(15, ry - 18, w - 30, 30);
       }
 
-      ctx.font = "bold 12px monospace";
+      ctx.font = "bold 15px monospace";
       ctx.textAlign = "left";
       ctx.fillStyle = "#d4d4d8";
       ctx.fillText(row.name, colX.name, ry);
       ctx.fillStyle = "rgba(160,140,100,0.4)";
-      ctx.font = "10px monospace";
-      ctx.fillText(`#${row.agentId}`, colX.name + ctx.measureText(row.name).width + 8, ry);
+      ctx.font = "12px monospace";
+      ctx.fillText(`#${row.agentId}`, colX.name + ctx.measureText(row.name).width + 10, ry);
 
-      ctx.font = "bold 12px monospace";
+      ctx.font = "bold 15px monospace";
       ctx.textAlign = "right";
       ctx.fillStyle = row.completedRuns > 0 ? "#e4e4e7" : "#52525b";
       ctx.fillText(String(row.completedRuns), colX.runs, ry);
@@ -2255,7 +2255,7 @@ function initWorld(
       ctx.fillStyle = "#a78bfa";
       ctx.fillText("$" + formatUsd(row.economy.totalEarned), colX.revenue, ry);
 
-      ctx.fillStyle = "#0090ff";
+      ctx.fillStyle = "#f5d96a";
       ctx.fillText(formatTFil(row.economy.totalSpent), colX.storage, ry);
 
       ctx.fillStyle = "#e8a030";
@@ -2264,95 +2264,95 @@ function initWorld(
       ctx.textAlign = "center";
       ctx.fillStyle = statusCol;
       ctx.shadowColor = statusCol;
-      ctx.shadowBlur = 4;
-      ctx.font = "bold 10px monospace";
+      ctx.shadowBlur = 5;
+      ctx.font = "bold 13px monospace";
       ctx.fillText(statusLabel, colX.status, ry);
       ctx.shadowBlur = 0;
     });
 
     // ── Bottom section: Activity + Leaderboard ──
-    const bottomY = h - 170;
+    const bottomY = h - 190;
 
     // Separator
-    ctx.fillStyle = "rgba(0,144,255,0.2)";
+    ctx.fillStyle = "rgba(245,217,106,0.2)";
     ctx.fillRect(10, bottomY - 10, w - 20, 1);
 
     // ── Recent Activity (left half) ──
-    ctx.font = "bold 11px Cinzel, serif";
+    ctx.font = "bold 15px Cinzel, serif";
     ctx.fillStyle = "rgba(245,217,106,0.6)";
     ctx.textAlign = "left";
-    ctx.fillText("RECENT ACTIVITY", 20, bottomY + 8);
+    ctx.fillText("RECENT ACTIVITY", 20, bottomY + 10);
 
     const recentEvents = d.events.slice(0, 5);
     recentEvents.forEach((ev, i) => {
-      const ey = bottomY + 28 + i * 24;
+      const ey = bottomY + 32 + i * 28;
       const evColor = ev.type === "BudgetDeposited" ? "#10b981"
-        : ev.type === "StorageCostRecorded" ? "#0090ff"
+        : ev.type === "StorageCostRecorded" ? "#f5d96a"
         : ev.type === "RevenueRecorded" ? "#a78bfa"
         : "#6b7280";
 
       // Event indicator dot
       ctx.fillStyle = evColor;
       ctx.shadowColor = evColor;
-      ctx.shadowBlur = 4;
+      ctx.shadowBlur = 5;
       ctx.beginPath();
-      ctx.arc(28, ey - 4, 3, 0, Math.PI * 2);
+      ctx.arc(28, ey - 5, 4, 0, Math.PI * 2);
       ctx.fill();
       ctx.shadowBlur = 0;
 
-      ctx.font = "11px monospace";
+      ctx.font = "13px monospace";
       ctx.fillStyle = "#a1a1aa";
       ctx.textAlign = "left";
       const desc = eventDescription(ev);
-      ctx.fillText(desc.length > 50 ? desc.slice(0, 50) + "..." : desc, 40, ey);
+      ctx.fillText(desc.length > 48 ? desc.slice(0, 48) + "..." : desc, 44, ey);
 
       // Block number
-      ctx.font = "9px monospace";
+      ctx.font = "11px monospace";
       ctx.fillStyle = "rgba(100,100,120,0.5)";
-      ctx.fillText(`#${ev.blockNumber}`, 40 + Math.min(ctx.measureText(desc).width + 10, w / 2 - 80), ey);
+      ctx.fillText(`#${ev.blockNumber}`, 44 + Math.min(ctx.measureText(desc).width + 10, w / 2 - 80), ey);
     });
 
     // ── Storage Leaderboard (right half) ──
     const lbX = w / 2 + 20;
-    ctx.font = "bold 11px Cinzel, serif";
+    ctx.font = "bold 15px Cinzel, serif";
     ctx.fillStyle = "rgba(245,217,106,0.6)";
     ctx.textAlign = "left";
-    ctx.fillText("STORAGE LEADERBOARD", lbX, bottomY + 8);
+    ctx.fillText("STORAGE LEADERBOARD", lbX, bottomY + 10);
 
     const leaderboard = [...d.agentRows]
       .sort((a, b) => Number(BigInt(b.economy.totalSpent) - BigInt(a.economy.totalSpent)))
       .slice(0, 5);
     leaderboard.forEach((row, rank) => {
-      const ly = bottomY + 28 + rank * 24;
+      const ly = bottomY + 32 + rank * 28;
       const statusCol = row.economy.status === "healthy" ? "#10b981" : row.economy.status === "at-risk" ? "#f59e0b" : "#6b7280";
 
       // Rank
-      ctx.font = "bold 18px monospace";
+      ctx.font = "bold 22px monospace";
       ctx.fillStyle = "rgba(100,100,120,0.3)";
       ctx.textAlign = "left";
       ctx.fillText(String(rank + 1), lbX, ly + 2);
 
       // Name
-      ctx.font = "bold 12px monospace";
+      ctx.font = "bold 15px monospace";
       ctx.fillStyle = "#d4d4d8";
-      ctx.fillText(row.name, lbX + 28, ly);
+      ctx.fillText(row.name, lbX + 32, ly);
 
       // Cost + status
       ctx.textAlign = "right";
       ctx.fillStyle = statusCol;
-      ctx.font = "bold 12px monospace";
+      ctx.font = "bold 15px monospace";
       ctx.shadowColor = statusCol;
-      ctx.shadowBlur = 4;
+      ctx.shadowBlur = 5;
       ctx.fillText(formatTFil(row.economy.totalSpent) + " tFIL", w - 20, ly);
       ctx.shadowBlur = 0;
 
       ctx.fillStyle = "rgba(100,100,120,0.4)";
-      ctx.font = "9px monospace";
-      ctx.fillText(row.economy.status, w - 20, ly + 14);
+      ctx.font = "11px monospace";
+      ctx.fillText(row.economy.status, w - 20, ly + 16);
     });
 
     // ── Timestamp ──
-    ctx.font = "9px monospace";
+    ctx.font = "11px monospace";
     ctx.fillStyle = "rgba(100,100,120,0.4)";
     ctx.textAlign = "right";
     ctx.fillText("LIVE  " + new Date(d.fetchedAt).toLocaleTimeString(), w - 15, h - 10);
@@ -2381,7 +2381,7 @@ function initWorld(
     map: econBoardTex,
     roughness: 0.15,
     metalness: 0.1,
-    emissive: 0x001122,
+    emissive: 0x221100,
     emissiveIntensity: 0.8,
     side: THREE.FrontSide,
   });
@@ -2390,8 +2390,8 @@ function initWorld(
   econScreen.position.set(0, ECON_BOARD_H / 2 + 1.5, 0);
   econBoardGroup.add(econScreen);
 
-  // Frame — dark metal border around the screen
-  const frameMat = new THREE.MeshStandardMaterial({ color: 0x0a1420, metalness: 0.95, roughness: 0.15 });
+  // Frame — dark brass border around the screen
+  const frameMat = new THREE.MeshStandardMaterial({ color: 0x201408, metalness: 0.95, roughness: 0.15 });
   const frameThick = 0.15;
   // Top frame
   const frameTop = new THREE.Mesh(new THREE.BoxGeometry(ECON_BOARD_W + frameThick * 2, frameThick, 0.3), frameMat);
@@ -2410,14 +2410,14 @@ function initWorld(
   frameRight.position.set(ECON_BOARD_W / 2 + frameThick / 2, ECON_BOARD_H / 2 + 1.5, 0);
   econBoardGroup.add(frameRight);
 
-  // Blue LED strip along the top
-  const ledStripMat = new THREE.MeshStandardMaterial({ color: FIL_BLUE, emissive: FIL_BLUE, emissiveIntensity: 1.5, roughness: 0.2 });
+  // Gold LED strip along the top
+  const ledStripMat = new THREE.MeshStandardMaterial({ color: 0xf5d96a, emissive: 0xf5d96a, emissiveIntensity: 1.5, roughness: 0.2 });
   const ledStrip = new THREE.Mesh(new THREE.BoxGeometry(ECON_BOARD_W + 0.6, 0.08, 0.08), ledStripMat);
   ledStrip.position.set(0, ECON_BOARD_H / 2 + 1.5 + ECON_BOARD_H / 2 + frameThick + 0.06, 0);
   econBoardGroup.add(ledStrip);
 
   // Support pillars (two metal poles)
-  const pillarMat = new THREE.MeshStandardMaterial({ color: 0x1a2a3a, metalness: 0.9, roughness: 0.2 });
+  const pillarMat = new THREE.MeshStandardMaterial({ color: 0x3a2a1a, metalness: 0.9, roughness: 0.2 });
   [-1, 1].forEach((side) => {
     const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, ECON_BOARD_H / 2 + 1.5, 8), pillarMat);
     pillar.position.set(side * (ECON_BOARD_W / 2 - 0.5), (ECON_BOARD_H / 2 + 1.5) / 2, -0.1);
@@ -2426,14 +2426,14 @@ function initWorld(
   });
 
   // Spotlight illuminating the board
-  const boardSpot = new THREE.SpotLight(0x0090ff, 3, 20, Math.PI / 5);
+  const boardSpot = new THREE.SpotLight(0xf5d96a, 3, 20, Math.PI / 5);
   boardSpot.position.set(0, ECON_BOARD_H + 4, 5);
   boardSpot.target.position.set(0, ECON_BOARD_H / 2 + 1.5, 0);
   econBoardGroup.add(boardSpot);
   econBoardGroup.add(boardSpot.target);
 
   // Point light in front of screen for glow effect
-  const boardGlow = new THREE.PointLight(0x0090ff, 1.5, 12);
+  const boardGlow = new THREE.PointLight(0xf5d96a, 1.5, 12);
   boardGlow.position.set(0, ECON_BOARD_H / 2 + 1.5, 2);
   econBoardGroup.add(boardGlow);
 
@@ -2451,11 +2451,11 @@ function initWorld(
   econLabelCanvas.height = 64;
   const econLabelCtx = econLabelCanvas.getContext("2d")!;
   econLabelCtx.font = "bold 28px MedievalSharp";
-  econLabelCtx.fillStyle = "#0090ff";
+  econLabelCtx.fillStyle = "#f5d96a";
   econLabelCtx.textAlign = "center";
-  econLabelCtx.shadowColor = "rgba(0,144,255,0.6)";
+  econLabelCtx.shadowColor = "rgba(245,217,106,0.6)";
   econLabelCtx.shadowBlur = 10;
-  econLabelCtx.fillText("Economy Exchange", 256, 36);
+  econLabelCtx.fillText("FilCraft Exchange", 256, 36);
   const econLabelSprite = new THREE.Sprite(
     new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(econLabelCanvas), transparent: true, depthTest: false })
   );
