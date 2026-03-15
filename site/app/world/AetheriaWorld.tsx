@@ -1406,7 +1406,7 @@ function initWorld(
   onFurnaceClick: () => void
 ) {
   const initialData = dataRef.current;
-  const WORLD_SIZE = 120;
+  const WORLD_SIZE = 55;
   const H = (x: number, z: number) =>
     Math.sin(x * 0.05) * Math.cos(z * 0.07) * 2 +
     Math.sin(x * 0.12 + z * 0.08) * 1.5 +
@@ -1428,7 +1428,7 @@ function initWorld(
   renderer.toneMappingExposure = 0.85;
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(0x1a1520, 0.012);
+  scene.fog = new THREE.FogExp2(0x1a1520, 0.022);
   scene.background = new THREE.Color(0x0d0a15);
   const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 800);
 
@@ -1616,7 +1616,7 @@ function initWorld(
       [0x0a1f2a, 0x0d2535, 0x0a1a22], // dark teal-blue
       [0x1a2a10, 0x162208, 0x1f2a14], // mossy
     ];
-    const TREE_COUNT = 120;
+    const TREE_COUNT = 3;
     for (let i = 0; i < TREE_COUNT; i++) {
       // Polar coords — uniform distribution in the annular ring
       const angle = (i / TREE_COUNT) * Math.PI * 2 + (Math.random() - 0.5) * (Math.PI * 2 / TREE_COUNT) * 2;
@@ -2698,13 +2698,6 @@ function initWorld(
   }
 
   const agentCreatures: AgentCreature[] = [];
-  const FIRE_RING_RADIUS = 3.5; // agents circle around their network's fire
-  const agentsByNetwork = new Map<string, AgentRow[]>();
-  initialData.agentRows.forEach((row) => {
-    const list = agentsByNetwork.get(row.networkId) ?? [];
-    list.push(row);
-    agentsByNetwork.set(row.networkId, list);
-  });
   const idleClip = gltf.animations?.find((a: { name: string }) => a.name === "Idle") ?? null;
   const walkClip = gltf.animations?.find((a: { name: string }) => a.name === "Walking") ?? null;
   const sittingClip = gltf.animations?.find((a: { name: string }) => a.name === "Sitting") ?? null;
@@ -2715,14 +2708,19 @@ function initWorld(
     .filter(Boolean) as { name: string }[];
   const pickRandomIdleAnim = () => idleAnims[Math.floor(Math.random() * idleAnims.length)] ?? idleClip;
 
-  initialData.agentRows.forEach((row) => {
+  // Evenly distribute agents across the terrain using a golden-angle spiral.
+  // This gives maximum spacing with no clustering regardless of agent count.
+  const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5)); // ≈ 137.5°
+  const SPAWN_BOUND = WORLD_SIZE * 0.30;
+  const totalAgents = initialData.agentRows.length;
+
+  initialData.agentRows.forEach((row, globalIdx) => {
     const cfg = AGENT_CONFIG[row.agentId] ?? { ...DEFAULT_AGENT, displayName: row.name };
-    const [sx, sz] = NETWORK_TO_FIRE[row.networkId] ?? cfg.spawnNear;
-    const networkAgents = agentsByNetwork.get(row.networkId) ?? [row];
-    const idxInNetwork = networkAgents.indexOf(row);
-    const angle = (idxInNetwork / Math.max(1, networkAgents.length)) * Math.PI * 2;
-    const x = sx + Math.cos(angle) * FIRE_RING_RADIUS + (Math.random() - 0.5) * 1;
-    const z = sz + Math.sin(angle) * FIRE_RING_RADIUS + (Math.random() - 0.5) * 1;
+    // Fibonacci spiral: radius grows with sqrt(index) for uniform area coverage
+    const r = SPAWN_BOUND * Math.sqrt((globalIdx + 0.5) / Math.max(1, totalAgents));
+    const theta = globalIdx * GOLDEN_ANGLE;
+    const x = r * Math.cos(theta);
+    const z = r * Math.sin(theta);
     const y = H(x, z);
     const size = 0.65;
     const displayName = row.name || cfg.displayName;
@@ -3020,6 +3018,7 @@ function initWorld(
       c.mesh.position.z = c.z;
       c.mesh.rotation.y = c.facing;
       if (c.mixer) c.mixer.update(dt);
+
       const ud = (c.mesh as { userData?: { healthGlow?: { visible: boolean; material?: { opacity: number } }; agentLight?: { intensity: number }; halo?: { visible: boolean; rotation: { z: number } } } }).userData;
       if (ud?.healthGlow && currentRow) {
         ud.healthGlow.visible = isHealthy;
@@ -3032,6 +3031,7 @@ function initWorld(
         ud.halo.visible = isHealthy;
         if (ud.halo.visible) ud.halo.rotation.z += dt * 1.2;
       }
+
       // Crossfade Idle <-> Sitting on status change
       if (currentRow) {
         const wasActive = c.row.economy.status === "healthy";
