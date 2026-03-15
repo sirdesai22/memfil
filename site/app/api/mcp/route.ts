@@ -10,7 +10,7 @@
  *   Settings → MCP Servers → Add → HTTP → https://filcraft.io/api/mcp
  *
  * Or in .claude.json / claude_desktop_config.json:
- *   { "mcpServers": { "memfil": { "type": "http", "url": "https://filcraft.io/api/mcp" } } }
+ *   { "mcpServers": { "filcraft": { "type": "http", "url": "https://filcraft.io/api/mcp" } } }
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
