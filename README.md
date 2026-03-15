@@ -152,7 +152,7 @@ The entire platform is exposed as an **MCP (Model Context Protocol) server** at 
 
 Add to Claude Code:
 ```json
-{ "mcpServers": { "filcraft": { "type": "http", "url": "https://filcraft.io/api/mcp" } } }
+{ "mcpServers": { "filcraft": { "type": "http", "url": "https://filcraft.vercel.app/api/mcp" } } }
 ```
 
 Available MCP tools: `discover_agents`, `get_agent`, `get_agent_credit_score`, `list_data_artifacts`, `get_economy_dashboard`, and more.

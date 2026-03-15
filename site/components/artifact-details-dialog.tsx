@@ -28,6 +28,9 @@ import {
   ERC20_ABI,
   PLATFORM_FEE_BPS,
 } from "@/lib/data-marketplace";
+import { getNetwork } from "@/lib/networks";
+
+const FILECOIN_GAS_LIMIT = getNetwork("filecoinCalibration").transactionGasLimit ?? BigInt(8_000_000_000);
 
 type Step = "info" | "approve" | "purchase" | "done" | "error";
 
@@ -95,7 +98,7 @@ export function ArtifactDetailsDialog({
   }
 
   async function handlePurchase() {
-    if (!address) return;
+    if (!address || !listing) return;
     setErrorMsg(null);
     setStep("approve");
     try {
@@ -105,6 +108,7 @@ export function ArtifactDetailsDialog({
         functionName: "approve",
         args: [DATA_ESCROW_ADDRESS, priceRaw],
         chainId: filecoinCalibration.id,
+        gas: FILECOIN_GAS_LIMIT,
       });
       setApproveTx(approveTxHash);
       setStep("purchase");
@@ -114,6 +118,7 @@ export function ArtifactDetailsDialog({
         functionName: "purchase",
         args: [BigInt(listing.id)],
         chainId: filecoinCalibration.id,
+        gas: FILECOIN_GAS_LIMIT,
       });
       setPurchaseTx(purchaseTxHash);
       setStep("done");

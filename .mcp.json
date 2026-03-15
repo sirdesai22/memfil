@@ -2,7 +2,7 @@
   "mcpServers": {
     "filcraft": {
       "type": "url",
-      "url": "https://filcraft.io/api/mcp"
+      "url": "https://filcraft.vercel.app/api/mcp"
     }
   }
 }
