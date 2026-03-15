@@ -30,6 +30,9 @@ const AGENT_RUN_ENDPOINTS: Record<string, string> = {
   "14": process.env.COMPETITOR_ANALYSER_URL
     ? `${process.env.COMPETITOR_ANALYSER_URL}/api/debug/reports`
     : "https://competitor-analyser.vercel.app/api/debug/reports",
+  "15": process.env.BRAND_AGENT_URL
+    ? `${process.env.BRAND_AGENT_URL}/api/debug/reports`
+    : "https://brand-agent-six.vercel.app/api/debug/reports",
 };
 
 async function fetchRunCounts(): Promise<Record<string, number>> {

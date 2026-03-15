@@ -24,6 +24,7 @@ import {
 import { AgentArtifactCard } from "@/components/agent-artifact-card";
 import { ArtifactDetailsDialog } from "@/components/artifact-details-dialog";
 import { GiveFeedback } from "@/components/give-feedback";
+import { AgentInvoker } from "@/components/agent-invoker";
 import type { DataListing } from "@/lib/data-marketplace";
 import { getNetwork, getExplorerAddressUrl, getExplorerUrl, type NetworkId } from "@/lib/networks";
 import type { AgentEconomyAccount } from "@/lib/economy";
@@ -501,22 +502,11 @@ function InvokeTabContent({
     );
   }
 
-  const { x402Endpoint, cost, currency, network, inputSchema, healthUrl } = invocationGuide;
-  const curlCommand = `curl -X POST "${x402Endpoint}" \\
-  -H "Content-Type: application/json" \\
-  -H "X-PAYMENT: <x402-payment-token>" \\
-  -d '${JSON.stringify(
-    inputSchema && "properties" in inputSchema
-      ? Object.fromEntries(
-          Object.keys((inputSchema as { properties: Record<string, unknown> }).properties).map(
-            (k) => [k, `<${k}>`]
-          )
-        )
-      : { body: "..." }
-  )}'`;
+  const { x402Endpoint, healthUrl } = invocationGuide;
 
   return (
     <div className="space-y-4">
+      {/* Health status */}
       <Card className="border-border">
         <CardHeader className="pb-3">
           <h2 className="font-semibold text-sm flex items-center gap-2">
@@ -536,11 +526,7 @@ function InvokeTabContent({
               }`}
             />
             <span className="text-sm">
-              {healthStatus === "ok"
-                ? "Live"
-                : healthStatus === "unreachable"
-                  ? "Unreachable"
-                  : "Status unknown"}
+              {healthStatus === "ok" ? "Live" : healthStatus === "unreachable" ? "Unreachable" : "Status unknown"}
             </span>
             {healthUrl && (
               <span className="ml-auto text-xs font-mono text-muted-foreground truncate max-w-[200px]">
@@ -551,71 +537,29 @@ function InvokeTabContent({
         </CardContent>
       </Card>
 
+      {/* Interactive invoker */}
       <Card className="border-border">
         <CardHeader className="pb-3">
-          <h2 className="font-semibold text-sm flex items-center gap-2">
-            <Zap className="h-4 w-4 text-violet-500" />
-            x402 Invocation
-          </h2>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-1.5">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Endpoint
-            </p>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 truncate rounded bg-muted px-2 py-1.5 text-xs font-mono">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-sm flex items-center gap-2">
+              <Zap className="h-4 w-4 text-violet-500" />
+              Run Agent
+            </h2>
+            <div className="flex items-center gap-1.5">
+              <code className="truncate max-w-[180px] rounded bg-muted px-2 py-0.5 text-[10px] font-mono text-muted-foreground">
                 {x402Endpoint}
               </code>
               <button
                 onClick={() => copyText(x402Endpoint)}
                 className="shrink-0 text-muted-foreground hover:text-foreground"
               >
-                <Copy className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Cost
-              </p>
-              <p className="text-sm font-semibold">{cost ? `${cost} ${currency}` : "—"}</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Network
-              </p>
-              <p className="text-sm font-mono">{network || "—"}</p>
-            </div>
-          </div>
-          {inputSchema && (
-            <div className="space-y-1.5">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Input Schema
-              </p>
-              <pre className="overflow-x-auto rounded-lg border border-border bg-muted/40 p-3 text-xs leading-relaxed max-h-40 overflow-y-auto">
-                {JSON.stringify(inputSchema, null, 2)}
-              </pre>
-            </div>
-          )}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Example curl
-              </p>
-              <button
-                onClick={() => copyText(curlCommand)}
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-              >
                 <Copy className="h-3 w-3" />
-                Copy
               </button>
             </div>
-            <pre className="overflow-x-auto rounded-lg border border-border bg-muted/40 p-3 text-[11px] leading-relaxed whitespace-pre-wrap break-all max-h-32 overflow-y-auto">
-              {curlCommand}
-            </pre>
           </div>
+        </CardHeader>
+        <CardContent>
+          <AgentInvoker guide={invocationGuide} />
         </CardContent>
       </Card>
     </div>

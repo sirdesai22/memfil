@@ -3,6 +3,9 @@
  * Used by the /live page to show real agent output.
  */
 
+const BRAND_AGENT_BASE =
+  process.env.BRAND_AGENT_URL ?? "https://brand-agent-six.vercel.app";
+
 const SEO_AGENT_BASE =
   process.env.SEO_AGENT_URL ?? "https://seo-agent-rouge-five.vercel.app";
 const INVESTOR_FINDER_BASE =
@@ -40,6 +43,16 @@ export interface InvestorReportSummary {
   idea: string;
   focCid?: string;
   focListingId?: string | null;
+  createdAt: string;
+  reportUrl: string;
+}
+
+export interface BrandReportSummary {
+  runId: string;
+  status: "completed";
+  brandName: string;
+  focCid: string;
+  focListingId: string;
   createdAt: string;
   reportUrl: string;
 }
@@ -158,4 +171,22 @@ export async function fetchRecentCompetitorReports(limit = 5): Promise<Competito
   );
 
   return full;
+}
+
+export async function fetchRecentBrandReports(limit = 20): Promise<BrandReportSummary[]> {
+  try {
+    const { fetchDataListings } = await import("./data-marketplace");
+    const { listings } = await fetchDataListings({ agentId: "15" });
+    return listings.slice(0, limit).map((l) => ({
+      runId: `brand_listing_${l.id}`,
+      status: "completed" as const,
+      brandName: `Brand extraction · listing #${l.id}`,
+      focCid: l.contentCid,
+      focListingId: l.id,
+      createdAt: new Date(Number(l.createdAt) * 1000).toISOString(),
+      reportUrl: BRAND_AGENT_BASE,
+    }));
+  } catch {
+    return [];
+  }
 }

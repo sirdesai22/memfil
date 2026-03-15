@@ -447,9 +447,9 @@ export function LoadingScreen({ onEnter }: { onEnter: () => void }) {
             position: "absolute", bottom: "11%", left: 0, right: 0,
             textAlign: "center",
             fontFamily: CINZEL,
-            fontSize: "0.52rem",
+            fontSize: "0.72rem",
             letterSpacing: "0.45em",
-            color: "rgba(168,144,96,0.55)",
+            color: "rgba(245,217,106,0.92)",
             textTransform: "uppercase",
             animation: "captionIn 2.8s ease forwards",
             pointerEvents: "none",
@@ -469,7 +469,7 @@ export function LoadingScreen({ onEnter }: { onEnter: () => void }) {
             {(["agent", "validator", "storage"] as NodeType[]).map((type) => (
               <div key={type} style={{ display: "flex", alignItems: "center", gap: 7 }}>
                 <div style={{ width: 6, height: 6, borderRadius: "50%", background: NODE_PALETTE[type].hex, boxShadow: `0 0 6px ${NODE_PALETTE[type].hex}` }} />
-                <span style={{ fontFamily: CINZEL, fontSize: "0.42rem", letterSpacing: "0.25em", color: NODE_PALETTE[type].hex, textTransform: "uppercase" }}>
+                <span style={{ fontFamily: CINZEL, fontSize: "0.58rem", letterSpacing: "0.25em", color: NODE_PALETTE[type].hex, textTransform: "uppercase", filter: "brightness(1.15)" }}>
                   {type === "agent" ? "Agents" : type === "validator" ? "Validators" : "Storage"}
                 </span>
               </div>
@@ -565,7 +565,7 @@ export function LoadingScreen({ onEnter }: { onEnter: () => void }) {
               <FilecoinLogo size={18} />
             </div>
             <p style={{
-              fontFamily: CINZEL, fontSize: "0.57rem", color: "#a89060",
+              fontFamily: CINZEL, fontSize: "0.78rem", color: "#f5d96a",
               textTransform: "uppercase", margin: 0, letterSpacing: "0.38em",
             }}>
               Filecoin Agent Economy
@@ -578,8 +578,8 @@ export function LoadingScreen({ onEnter }: { onEnter: () => void }) {
           {/* Title letters */}
           <h1 style={{
             fontFamily: CINZEL,
-            fontSize: "clamp(58px, 11vw, 108px)",
-            fontWeight: 900, color: "#f5d96a",
+            fontSize: "clamp(72px, 13vw, 128px)",
+            fontWeight: 900, color: "#fff8d6",
             margin: 0, letterSpacing: "0.07em", lineHeight: 1,
           }}>
             {TITLE.split("").map((char, i) => (
@@ -599,7 +599,7 @@ export function LoadingScreen({ onEnter }: { onEnter: () => void }) {
           {/* Tagline */}
           <p style={{
             marginTop: 22, fontFamily: CINZEL,
-            fontSize: "clamp(11px, 1.2vw, 13px)", letterSpacing: "0.14em", color: "#a89060",
+            fontSize: "clamp(14px, 1.6vw, 17px)", letterSpacing: "0.14em", color: "#f5d96a",
             animation: phase >= 5 ? "taglineReveal 0.9s cubic-bezier(0.22,1,0.36,1) both" : "none",
             opacity: phase >= 5 ? 1 : 0,
           }}>
@@ -623,12 +623,12 @@ export function LoadingScreen({ onEnter }: { onEnter: () => void }) {
                 }}
                 style={{
                   border: "1px solid rgba(245,217,106,0.45)",
-                  color: "#f5d96a",
+                  color: "#fff8d6",
                   background: "rgba(245,217,106,0.04)",
                   fontFamily: CINZEL,
                   letterSpacing: "0.24em",
                   textTransform: "uppercase",
-                  fontSize: "0.65rem",
+                  fontSize: "0.8rem",
                   padding: "14px 54px",
                   cursor: "pointer",
                   animation: "buttonReveal 0.7s cubic-bezier(0.22,1,0.36,1) both, buttonPulse 3s ease-in-out 0.8s infinite",
