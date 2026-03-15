@@ -8,13 +8,13 @@
  */
 
 import { NextResponse } from "next/server";
-import { getAgentsPage } from "@/lib/agents";
+import { getAgentsPage, getCachedAgents } from "@/lib/agents";
 import {
   fetchEconomyAccounts,
   fetchEconomyEvents,
   computeEconomySummary,
 } from "@/lib/economy";
-import { fetchRecentSEOReports, fetchRecentInvestorReports, fetchRecentCompetitorReports } from "@/lib/agent-reports";
+import { fetchRecentSEOReports, fetchRecentInvestorReports, fetchRecentCompetitorReports, fetchRecentBrandReports } from "@/lib/agent-reports";
 import type { NetworkId } from "@/lib/networks";
 
 export const dynamic = "force-dynamic";
@@ -29,8 +29,10 @@ export async function GET(request: Request) {
 
   if (agentIdsParam) {
     agentIds = agentIdsParam.split(",").filter(Boolean);
-    agentIds.forEach((id) => {
-      nameByAgentId[id] = `Agent #${id}`;
+    // Fetch agent metadata to resolve names (otherwise we'd only have "Agent #id")
+    const agents = await getCachedAgents(networkParam).catch(() => []);
+    agents.forEach((a) => {
+      nameByAgentId[a.agentId] = a.metadata?.name?.trim() || `Agent #${a.agentId}`;
     });
   } else {
     const result = await getAgentsPage({
@@ -43,18 +45,20 @@ export async function GET(request: Request) {
     });
   }
 
-  const [accounts, events, seoReports, investorReports, competitorReports] = await Promise.all([
+  const [accounts, events, seoReports, investorReports, competitorReports, brandReports] = await Promise.all([
     fetchEconomyAccounts(agentIds).catch(() => new Map()),
     fetchEconomyEvents(20).catch(() => []),
     fetchRecentSEOReports(50).catch(() => []),
     fetchRecentInvestorReports(50).catch(() => []),
     fetchRecentCompetitorReports(50).catch(() => []),
+    fetchRecentBrandReports(50).catch(() => []),
   ]);
 
   const runCounts: Record<string, number> = {
     "12": seoReports.length,
     "13": investorReports.length,
     "14": competitorReports.length,
+    "15": brandReports.length,
   };
 
   const summary = computeEconomySummary(accounts);

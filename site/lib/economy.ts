@@ -9,7 +9,7 @@
  * after running erc-8004-contracts/scripts/deploy-economy.ts).
  */
 
-import { createPublicClient, http, parseAbi, parseAbiItem, type Log } from "viem";
+import { createPublicClient, http, parseAbi, decodeEventLog, type Log } from "viem";
 import { filecoinCalibration } from "viem/chains";
 
 // ── Contract ──────────────────────────────────────────────────────────────────
@@ -65,6 +65,14 @@ function createClient() {
       process.env.FILECOIN_CALIBRATION_RPC_URL ||
         "https://api.calibration.node.glif.io/rpc/v1"
     ),
+  });
+}
+
+// glif.io does not support eth_getLogs; use Ankr for event queries.
+function createLogsClient() {
+  return createPublicClient({
+    chain: filecoinCalibration,
+    transport: http("https://rpc.ankr.com/filecoin_testnet"),
   });
 }
 
@@ -149,72 +157,58 @@ export async function fetchEconomyAccounts(
  * Returns the last `limit` events across all 4 event types, newest first.
  */
 export async function fetchEconomyEvents(limit = 20): Promise<EconomyEvent[]> {
-  const client = createClient();
+  const client = createLogsClient();
   const address = AGENT_ECONOMY_REGISTRY_ADDRESS;
 
-  // Filecoin Calibration RPC may have lookback limits; use a reasonable window
-  // ~8000 blocks ≈ 2.8 days at ~30s/block
-  let fromBlock: bigint;
+  // Ankr supports eth_getLogs but caps at ~200 blocks per request.
+  // Fetch the last 1000 blocks in 200-block chunks (~5.5 hours at 20s/block).
+  const CHUNK = 200n;
+  const WINDOW = 1000n;
+
+  let latest: bigint;
   try {
-    const latest = await client.getBlockNumber();
-    fromBlock = latest > 8000n ? latest - 8000n : 0n;
+    latest = await client.getBlockNumber();
   } catch {
     return [];
   }
+  const windowStart = latest > WINDOW ? latest - WINDOW : 0n;
 
-  const [deposited, storageCosts, revenues, windDowns] = await Promise.allSettled([
-    client.getLogs({
-      address,
-      fromBlock,
-      event: parseAbiItem("event BudgetDeposited(uint256 indexed agentId, address indexed sponsor, uint256 amount)"),
-    }),
-    client.getLogs({
-      address,
-      fromBlock,
-      event: parseAbiItem("event StorageCostRecorded(uint256 indexed agentId, uint256 costWei, string cid)"),
-    }),
-    client.getLogs({
-      address,
-      fromBlock,
-      event: parseAbiItem("event RevenueRecorded(uint256 indexed agentId, uint256 usdCents)"),
-    }),
-    client.getLogs({
-      address,
-      fromBlock,
-      event: parseAbiItem("event AgentWindDown(uint256 indexed agentId, uint256 remainingBalance, string reason)"),
-    }),
-  ]);
+  // Fetch all raw contract logs in 200-block chunks (Ankr's per-request limit)
+  const rawLogs: Log[] = [];
+  for (let from = windowStart; from <= latest; from += CHUNK) {
+    const to = from + CHUNK - 1n < latest ? from + CHUNK - 1n : latest;
+    try {
+      const chunk = await client.getLogs({ address, fromBlock: from, toBlock: to });
+      rawLogs.push(...chunk);
+    } catch {
+      // skip failed chunk silently
+    }
+  }
 
+  // Decode each raw log client-side against all 4 event signatures
   const events: EconomyEvent[] = [];
-
-  function addLogs(result: PromiseSettledResult<Log[]>, type: EconomyEventType) {
-    if (result.status !== "fulfilled") return;
-    for (const log of result.value) {
-      const args = (log as { args?: Record<string, unknown> }).args ?? {};
+  for (const log of rawLogs) {
+    try {
+      const decoded = decodeEventLog({ abi: ECONOMY_ABI, data: log.data, topics: log.topics });
+      const args = (decoded.args ?? {}) as Record<string, unknown>;
       const data: Record<string, string> = {};
-      for (const [k, v] of Object.entries(args)) {
-        data[k] = String(v);
-      }
+      for (const [k, v] of Object.entries(args)) data[k] = String(v);
       events.push({
-        type,
+        type: decoded.eventName as EconomyEventType,
         agentId: data.agentId ?? "0",
         txHash: log.transactionHash ?? "",
         blockNumber: String(log.blockNumber ?? 0),
         data,
       });
+    } catch {
+      // unknown event signature — skip
     }
   }
 
-  addLogs(deposited, "BudgetDeposited");
-  addLogs(storageCosts, "StorageCostRecorded");
-  addLogs(revenues, "RevenueRecorded");
-  addLogs(windDowns, "AgentWindDown");
-
-  // Sort newest first (by block number desc)
   events.sort((a, b) => Number(b.blockNumber) - Number(a.blockNumber));
-
   return events.slice(0, limit);
 }
+
 
 // ── Aggregate stats ───────────────────────────────────────────────────────────
 

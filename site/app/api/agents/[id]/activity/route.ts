@@ -3,20 +3,23 @@ import {
   fetchRecentSEOReports,
   fetchRecentInvestorReports,
   fetchRecentCompetitorReports,
+  fetchRecentBrandReports,
   type SEOReportSummary,
   type InvestorReportSummary,
   type CompetitorReportSummary,
+  type BrandReportSummary,
 } from "@/lib/agent-reports";
 
 export const dynamic = "force-dynamic";
 
 const AGENT_ID_TO_FETCHER: Record<
   string,
-  () => Promise<SEOReportSummary[] | InvestorReportSummary[] | CompetitorReportSummary[]>
+  () => Promise<SEOReportSummary[] | InvestorReportSummary[] | CompetitorReportSummary[] | BrandReportSummary[]>
 > = {
   "12": () => fetchRecentSEOReports(20),
   "13": () => fetchRecentInvestorReports(20),
   "14": () => fetchRecentCompetitorReports(20),
+  "15": () => fetchRecentBrandReports(20),
 };
 
 export interface ActivityReport {
@@ -52,6 +55,8 @@ export async function GET(
     } else if ("url" in r && "focus" in r) {
       const cr = r as CompetitorReportSummary;
       summary = `${cr.url} — ${cr.focus}`;
+    } else if ("brandName" in r) {
+      summary = (r as BrandReportSummary).brandName;
     }
     return {
       runId: base.runId,

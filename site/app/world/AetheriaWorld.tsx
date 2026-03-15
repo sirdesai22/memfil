@@ -268,13 +268,17 @@ export function AetheriaWorld({
       });
     };
 
-    const loadModel = (
-      THREE: { GLTFLoader: new () => { load: (url: string, onLoad: (gltf: unknown) => void, onProgress?: unknown, onError?: (err: unknown) => void) => void } },
-      path: string,
-      name: string
-    ): Promise<unknown> => {
+    type GLTFLoaderCtor = new () => { load: (url: string, onLoad: (gltf: unknown) => void, onProgress?: unknown, onError?: (err: unknown) => void) => void };
+
+    const loadModel = (path: string, name: string): Promise<unknown> => {
       return new Promise((resolve, reject) => {
-        const loader = new THREE.GLTFLoader();
+        // Read GLTFLoader from window.THREE at call time — it was attached by the loader script.
+        const GLTFLoader = (window as unknown as { THREE: { GLTFLoader: GLTFLoaderCtor } }).THREE?.GLTFLoader;
+        if (!GLTFLoader) {
+          reject(new Error(`GLTFLoader not available on window.THREE when loading ${name}`));
+          return;
+        }
+        const loader = new GLTFLoader();
         loader.load(
           path,
           (gltf) => resolve(gltf),
@@ -297,12 +301,11 @@ export function AetheriaWorld({
       })
       .then(({ THREE }) => {
         if (cancelled) return Promise.reject(new Error("cancelled"));
-        const T = THREE as Parameters<typeof loadModel>[0];
         return Promise.all([
-          loadModel(T, "/models/RobotExpressive.glb", "RobotExpressive"),
-          loadModel(T, "/models/CastleModel.glb", "CastleModel"),
-          loadModel(T, "/models/filecoin_model.glb", "filecoin_model"),
-          loadModel(T, "/models/furnace.glb", "furnace"),
+          loadModel("/models/RobotExpressive.glb", "RobotExpressive"),
+          loadModel("/models/CastleModel.glb", "CastleModel"),
+          loadModel("/models/filecoin_model.glb", "filecoin_model"),
+          loadModel("/models/furnace.glb", "furnace"),
         ]).then(([gltf, castleGltf, filecoinGltf, furnaceGltf]) => ({ THREE, gltf, castleGltf, filecoinGltf, furnaceGltf }));
       })
       .then(({ THREE, gltf, castleGltf, filecoinGltf, furnaceGltf }) => {
@@ -356,7 +359,7 @@ export function AetheriaWorld({
             FILCRAFT
           </h1>
           <p className="text-[#5a4a2a] tracking-[4px] mt-2 text-xs">
-            ENTERING FILCRAFT
+            ENTERING ...
           </p>
           <div className="w-[300px] h-1 bg-[#1a1510] mt-8 rounded overflow-hidden">
             <div
@@ -419,7 +422,7 @@ export function AetheriaWorld({
             <div style={{ fontFamily: "Cinzel, serif", fontSize: 14, fontWeight: 700, letterSpacing: "0.22em", textAlign: "center", color: "#f5d96a", textShadow: "0 0 18px rgba(245,217,106,0.5)" }}>
               ⚔ AGENT ECONOMY ⚔
             </div>
-            <div style={{ fontFamily: "Cinzel, serif", fontSize: 10, letterSpacing: "0.35em", textAlign: "center", color: "rgba(245,217,106,0.35)", marginTop: 2 }}>
+            <div style={{ fontFamily: "Cinzel, serif", fontSize: 10, letterSpacing: "0.35em", textAlign: "center", color: "rgba(245,217,106,0.85)", marginTop: 2 }}>
               SCOREBOARD
             </div>
           </div>
@@ -437,20 +440,24 @@ export function AetheriaWorld({
                 const statusColor = isHealthy ? "#10b981" : isAtRisk ? "#f59e0b" : "#4b5563";
                 const statusGlow = isHealthy ? "0 0 7px rgba(16,185,129,0.9)" : isAtRisk ? "0 0 7px rgba(245,158,11,0.9)" : "none";
                 const rankLabel = ["Ⅰ","Ⅱ","Ⅲ","Ⅳ","Ⅴ"][idx] ?? `${idx+1}`;
-                const rankColor = idx === 0 ? "#f5d96a" : idx === 1 ? "#c0c0c0" : idx === 2 ? "#cd7f32" : "#4a3a1a";
+                const rankColor = idx === 0 ? "#f5d96a" : idx === 1 ? "#c0c0c0" : idx === 2 ? "#cd7f32" : "#a89060";
                 const rankBg = idx === 0 ? "rgba(245,217,106,0.12)" : idx === 1 ? "rgba(192,192,192,0.08)" : idx === 2 ? "rgba(205,127,50,0.08)" : "rgba(40,30,10,0.4)";
                 const rankBorder = idx === 0 ? "rgba(245,217,106,0.35)" : idx === 1 ? "rgba(192,192,192,0.25)" : idx === 2 ? "rgba(205,127,50,0.25)" : "rgba(60,45,15,0.4)";
 
                 return (
-                  <div
+                  <button
                     key={row.agentId}
+                    type="button"
+                    onClick={() => setSelectedAgentId(row.agentId)}
+                    title="View agent details"
+                    className="w-full text-left cursor-pointer hover:bg-[rgba(245,217,106,0.04)] transition-colors"
                     style={{
                       padding: "9px 14px",
                       borderBottom: idx < data.agentRows.length - 1 ? "1px solid rgba(60,45,15,0.4)" : undefined,
                       background: idx === 0 ? "linear-gradient(90deg, rgba(245,217,106,0.03), transparent 70%)" : "transparent",
                     }}
                   >
-                    {/* Top row: rank + status dot + name */}
+                    {/* Top row: rank + status dot + name + view link */}
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <div style={{ width: 22, height: 22, borderRadius: 2, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", background: rankBg, border: `1px solid ${rankBorder}`, fontFamily: "Cinzel, serif", fontSize: 13, fontWeight: 700, color: rankColor, textShadow: idx === 0 ? "0 0 8px rgba(245,217,106,0.6)" : "none" }}>
                         {rankLabel}
@@ -459,6 +466,7 @@ export function AetheriaWorld({
                       <div style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: "#e0cc98", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                         {cfg?.emoji ?? "🤖"} {row.name}
                       </div>
+                      <span style={{ fontSize: 10, color: "#a89060", letterSpacing: "0.08em", flexShrink: 0 }}>View →</span>
                     </div>
 
                     {/* Stats row */}
@@ -469,12 +477,12 @@ export function AetheriaWorld({
                         { label: "SPENT", value: `${formatTFil(row.economy.totalSpent)}`, color: "#f5b040" },
                       ].map((stat, si) => (
                         <div key={stat.label} style={{ flex: 1, padding: "4px 6px", borderLeft: si > 0 ? "1px solid rgba(60,45,15,0.5)" : undefined, textAlign: "center" }}>
-                          <div style={{ fontFamily: "Cinzel, serif", fontSize: 10, color: "#7d6b3d", letterSpacing: "0.1em", marginBottom: 2 }}>{stat.label}</div>
+                          <div style={{ fontFamily: "Cinzel, serif", fontSize: 10, color: "#b8a060", letterSpacing: "0.1em", marginBottom: 2 }}>{stat.label}</div>
                           <div style={{ fontSize: 14, fontWeight: 700, color: stat.color, fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>{stat.value}</div>
                         </div>
                       ))}
                     </div>
-                  </div>
+                  </button>
                 );
               })}
           </div>
@@ -484,13 +492,13 @@ export function AetheriaWorld({
             {/* Totals */}
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
               <div>
-                <div style={{ fontFamily: "Cinzel, serif", fontSize: 10, color: "#3a2a0a", letterSpacing: "0.12em", marginBottom: 2 }}>TOTAL STORAGE</div>
+                <div style={{ fontFamily: "Cinzel, serif", fontSize: 10, color: "#a89060", letterSpacing: "0.12em", marginBottom: 2 }}>TOTAL STORAGE</div>
                 <div style={{ fontSize: 17, fontWeight: 700, color: "#e8a030", lineHeight: 1 }}>
-                  {formatTFil(data.summary.totalStorageCostWei)} <span style={{ fontSize: 12, color: "#6a5020" }}>tFIL</span>
+                  {formatTFil(data.summary.totalStorageCostWei)} <span style={{ fontSize: 12, color: "#c0a850" }}>tFIL</span>
                 </div>
               </div>
               <div style={{ textAlign: "right" }}>
-                <div style={{ fontFamily: "Cinzel, serif", fontSize: 10, color: "#3a2a0a", letterSpacing: "0.12em", marginBottom: 2 }}>TOTAL REVENUE</div>
+                <div style={{ fontFamily: "Cinzel, serif", fontSize: 10, color: "#a89060", letterSpacing: "0.12em", marginBottom: 2 }}>TOTAL REVENUE</div>
                 <div style={{ fontSize: 17, fontWeight: 700, color: "#10b981", lineHeight: 1 }}>
                   ${formatUsd(data.summary.totalRevenueUsdCents)}
                 </div>
@@ -512,8 +520,8 @@ export function AetheriaWorld({
             </div>
 
             {lastRefresh && (
-              <div style={{ marginTop: 7, fontSize: 8, color: "#2a1a05", letterSpacing: "0.08em", display: "flex", alignItems: "center", gap: 4 }}>
-                <div className="animate-pulse" style={{ width: 4, height: 4, borderRadius: "50%", background: "#3a2a0a" }} />
+              <div style={{ marginTop: 7, fontSize: 8, color: "#8a7a4a", letterSpacing: "0.08em", display: "flex", alignItems: "center", gap: 4 }}>
+                <div className="animate-pulse" style={{ width: 4, height: 4, borderRadius: "50%", background: "#a89060" }} />
                 LIVE · {Math.round((Date.now() - lastRefresh.getTime()) / 1000)}s ago
               </div>
             )}
@@ -1156,16 +1164,16 @@ export function AetheriaWorld({
                                   }}
                                 >
                                   <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                      <span className="text-xl">{isFilecoin ? "&#127760;" : "&#x27e0;"}</span>
-                                      <div>
-                                        <div className="text-sm font-bold" style={{ color: selected ? "#f5d96a" : "#a89060" }}>
+                                    <div className="flex items-center gap-3 min-w-0">
+                                      <span className="text-xl shrink-0">{isFilecoin ? "\u{1F310}" : "\u27E0"}</span>
+                                      <div className="min-w-0 flex-1">
+                                        <div className="text-sm font-bold truncate" style={{ color: selected ? "#f5d96a" : "#a89060" }}>
                                           {n.name}
                                         </div>
-                                        <div className="text-[9px] font-mono text-[#5a4a2a]">
-                                          {n.identityRegistry.slice(0, 14)}...
+                                        <div className="text-[9px] font-mono text-[#a89060] truncate">
+                                          {n.identityRegistry.slice(0, 6)}…{n.identityRegistry.slice(-4)}
                                         </div>
-                                        <div className="text-[9px] text-[#7a6a4a] mt-0.5">{n.explorerName}</div>
+                                        <div className="text-[9px] text-[#8a7a4a] mt-0.5">{n.explorerName}</div>
                                       </div>
                                     </div>
                                     {selected && <span className="w-2.5 h-2.5 rounded-full bg-[#f5d96a]" style={{ boxShadow: "0 0 6px rgba(245,217,106,0.5)" }} />}
@@ -3032,7 +3040,8 @@ function initWorld(
       c.mesh.position.y = c.y;
       c.mesh.position.z = c.z;
       c.mesh.rotation.y = c.facing;
-      if (c.mixer) c.mixer.update(dt);
+      // Only update animation for healthy/running agents; non-running stay frozen at fireplace
+      if (c.mixer && isHealthy) c.mixer.update(dt);
       const ud = (c.mesh as { userData?: { healthGlow?: { visible: boolean; material?: { opacity: number } }; agentLight?: { intensity: number }; halo?: { visible: boolean; rotation: { z: number } } } }).userData;
       if (ud?.healthGlow && currentRow) {
         ud.healthGlow.visible = isHealthy;
