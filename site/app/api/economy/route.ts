@@ -8,7 +8,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { getAgentsPage } from "@/lib/agents";
+import { getAgentsPage, getCachedAgents } from "@/lib/agents";
 import {
   fetchEconomyAccounts,
   fetchEconomyEvents,
@@ -29,8 +29,10 @@ export async function GET(request: Request) {
 
   if (agentIdsParam) {
     agentIds = agentIdsParam.split(",").filter(Boolean);
-    agentIds.forEach((id) => {
-      nameByAgentId[id] = `Agent #${id}`;
+    // Fetch agent metadata to resolve names (otherwise we'd only have "Agent #id")
+    const agents = await getCachedAgents(networkParam).catch(() => []);
+    agents.forEach((a) => {
+      nameByAgentId[a.agentId] = a.metadata?.name?.trim() || `Agent #${a.agentId}`;
     });
   } else {
     const result = await getAgentsPage({

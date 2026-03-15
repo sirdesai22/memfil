@@ -356,7 +356,7 @@ export function AetheriaWorld({
             FILCRAFT
           </h1>
           <p className="text-[#5a4a2a] tracking-[4px] mt-2 text-xs">
-            ENTERING FILCRAFT
+            ENTERING ...
           </p>
           <div className="w-[300px] h-1 bg-[#1a1510] mt-8 rounded overflow-hidden">
             <div

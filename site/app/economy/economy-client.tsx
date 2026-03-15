@@ -205,8 +205,20 @@ export function EconomyClient({
     try {
       const res = await fetch(`/api/economy?agentIds=${agentIds.join(",")}`);
       if (res.ok) {
-        const fresh = await res.json() as DashboardData;
-        setData(fresh);
+        const fresh = (await res.json()) as DashboardData;
+        setData((prev) => {
+          // Preserve agent names from initial load when refresh returns "Agent #id"
+          const nameByAgentId = new Map(prev.agentRows.map((r) => [r.agentId, r.name]));
+          const agentRows = fresh.agentRows.map((row) => {
+            const existingName = nameByAgentId.get(row.agentId);
+            const isFallbackName = row.name === `Agent #${row.agentId}`;
+            return {
+              ...row,
+              name: isFallbackName && existingName ? existingName : row.name,
+            };
+          });
+          return { ...fresh, agentRows };
+        });
       }
     } catch {
       // silent — keep stale data
@@ -284,6 +296,44 @@ export function EconomyClient({
           description="Depleted or manually stopped"
           className="border-[rgba(168,144,96,0.15)] bg-[rgba(168,144,96,0.03)]"
         />
+      </div>
+
+      {/* 2b. Status legend */}
+      <div className="rounded-xl border border-[rgba(168,144,96,0.15)] bg-[rgba(18,13,6,0.4)] divide-y divide-[rgba(168,144,96,0.1)]">
+        <div className="px-5 py-3 flex items-center gap-2">
+          <span className="text-xs font-semibold text-[#a89060] uppercase tracking-widest" style={{ fontFamily: CINZEL }}>
+            Status Guide
+          </span>
+        </div>
+        <div className="grid sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-[rgba(168,144,96,0.1)]">
+          <div className="px-5 py-4 space-y-1.5">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              <span className="text-sm font-semibold text-emerald-400">Healthy</span>
+            </div>
+            <p className="text-xs text-[#a89060] leading-relaxed">
+              Balance is above <span className="text-[#e8dcc8]">0.015 tFIL</span> (3× the minimum). The agent is fully operational — it can store reports on Filecoin, earn revenue from x402 payments, and record activity on-chain. A healthy agent will continue running indefinitely as long as its balance stays topped up.
+            </p>
+          </div>
+          <div className="px-5 py-4 space-y-1.5">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-amber-400 shrink-0" />
+              <span className="text-sm font-semibold text-amber-400">At Risk</span>
+            </div>
+            <p className="text-xs text-[#a89060] leading-relaxed">
+              Balance is between <span className="text-[#e8dcc8]">0.005</span> and <span className="text-[#e8dcc8]">0.015 tFIL</span>. The agent is still operational but running low on funds. If the balance drops below <span className="text-[#e8dcc8]">0.005 tFIL</span>, anyone on the network can trigger wind-down. Top up immediately to restore healthy status.
+            </p>
+          </div>
+          <div className="px-5 py-4 space-y-1.5">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-[#a89060]/50 shrink-0" />
+              <span className="text-sm font-semibold text-[#a89060]/80">Wound Down</span>
+            </div>
+            <p className="text-xs text-[#a89060] leading-relaxed">
+              The agent has been stopped — either its balance fell below <span className="text-[#e8dcc8]">0.005 tFIL</span> and wind-down was triggered by a network participant, or the agent owner shut it down manually. Wound-down is permanent on-chain; the remaining balance (if any) is returned to whoever triggered it.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* 3. Agent P&L table */}
