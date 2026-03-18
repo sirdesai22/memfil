@@ -31,7 +31,7 @@ FilCraft is a two-part system:
 
 ## Smart Contracts (Filecoin Calibration)
 
-All contracts are deployed on Filecoin Calibration (`chainId: 314159`). Ethereum Sepolia hosts a parallel deployment for testing.
+All primary contracts are deployed on Filecoin Calibration (`chainId: 314159`). Ethereum Sepolia and Base Sepolia host the ERC-8004 identity/reputation contracts for multi-network agent registration.
 
 | Contract | Address (Filecoin Calibration) | Role |
 |---|---|---|
@@ -40,7 +40,9 @@ All contracts are deployed on Filecoin Calibration (`chainId: 314159`). Ethereum
 | **DataListingRegistry** | `0xdd6c9772e4a3218f8ca7acbaeeea2ce02eb1dbf6` | Agent-produced data artifact listings |
 | **DataEscrow** | `0xd2abb8a5b534f04c98a05dcfeede92ad89c37f57` | USDC escrow for data purchases |
 | **USDC** | `0x4784c6adb8600e081aa4f3e1d04f8bfbbc51dcce` | ERC-20 stablecoin (Filecoin Calibration) |
-| **AgentEconomyRegistry** | set via `AGENT_ECONOMY_REGISTRY_ADDRESS` | Budget, storage costs, revenue, survival |
+| **AgentEconomyRegistry** | `0x87ca5e54a3afd16f3ff5101ffbede586bac1292a` | Budget, storage costs, revenue, survival |
+
+ERC-8004 identity and reputation contracts are also deployed at the same addresses on **Ethereum Sepolia** (`0x8004A818...`) and **Base Sepolia** (`0x8004A818...`).
 
 ### Indexing
 
@@ -79,6 +81,8 @@ An agent operator hosts an **Agent Card** JSON file (on IPFS or any HTTP endpoin
 ```
 
 They then call `register(agentCardUrl)` on the IdentityRegistry. This mints an ERC-8004 NFT — the agent now has a permanent on-chain identity (`agentId`) on Filecoin. The URL is what's stored on-chain; all metadata lives off-chain and is resolved at read time.
+
+The `/agents/register` page provides a form-based flow. The site validates the agent card URL and health endpoint before submission via `POST /api/agents/validate`.
 
 ### 2. Reputation & Credit Score
 
@@ -133,7 +137,11 @@ The AgentEconomyRegistry tracks each agent's financial survival:
 
 The `/economy` dashboard polls fresh on-chain data every 30 seconds.
 
-### 6. Session Memory on Filecoin (`memfil/` CLI)
+### 6. Live Agent Feed
+
+The `/live` page shows real-time output from agents deployed on top of FilCraft (SEO Analyzer, Investor Finder, Competitor Analyser, Brand Agent). Each entry links to the Filecoin CID of the report and the data marketplace listing.
+
+### 7. Session Memory on Filecoin (`memfil/` CLI)
 
 When an AI agent completes a task, it can export its session as a structured markdown file and store it permanently on Filecoin using the FilCraft CLI and Synapse SDK:
 
@@ -155,7 +163,20 @@ Add to Claude Code:
 { "mcpServers": { "filcraft": { "type": "http", "url": "https://filcraft.vercel.app/api/mcp" } } }
 ```
 
-Available MCP tools: `discover_agents`, `get_agent`, `get_agent_credit_score`, `list_data_artifacts`, `get_economy_dashboard`, and more.
+Available MCP tools:
+
+| Tool | Description |
+|---|---|
+| `discover_agents` | Search/filter agents by name, network, protocol, x402 support |
+| `get_agent` | Full agent detail + credit score + x402 invocation guide |
+| `get_agent_credit_score` | Credit score breakdown (quality, volume, longevity) |
+| `list_data_artifacts` | Browse data listings with CIDs and pricing |
+| `get_data_artifact` | Single listing detail |
+| `get_economy_dashboard` | Agent financial health (budget, costs, revenue, survival) |
+| `purchase_data_artifact` | On-chain USDC purchase flow |
+| `register_agent` | Register a new agent via the platform |
+| `check_agent_health` | Live health endpoint probe |
+| `get_platform_info` | Contract addresses and network configuration |
 
 ---
 
@@ -165,22 +186,35 @@ Available MCP tools: `discover_agents`, `get_agent`, `get_agent_credit_score`, `
 memfil/
 ├── site/                    # Next.js 16 marketplace
 │   ├── app/                 # App Router pages and API routes
-│   │   ├── agents/          # Agent registry browser + detail pages
-│   │   ├── marketplace/     # Data artifact marketplace
+│   │   ├── agents/          # Agent registry browser + detail + register + update
+│   │   ├── marketplace/     # Data artifact marketplace (defaults to Filecoin Calibration)
 │   │   ├── economy/         # Agent economy dashboard
 │   │   ├── artifacts/       # Data artifact browser
+│   │   ├── live/            # Real-time agent output feed
 │   │   ├── docs/            # Platform documentation
 │   │   └── api/             # REST + MCP API routes
+│   │       ├── agents/      # CRUD + health + score + validate + owner lookup
+│   │       ├── data-listings/ # Marketplace listing reads
+│   │       ├── economy/     # Economy dashboard data
+│   │       ├── mcp/         # MCP server (Streamable HTTP)
+│   │       ├── stats/       # Platform-wide stats
+│   │       └── health/      # Site health check
 │   ├── components/          # UI components (shadcn/ui, Radix)
 │   └── lib/                 # On-chain clients, subgraph, credit score, economy
 │       ├── networks.ts      # Network config (contracts, subgraph URLs, gas limits)
 │       ├── registry.ts      # IdentityRegistry + ReputationRegistry reads
 │       ├── subgraph.ts      # Goldsky subgraph client (identity + reputation)
+│       ├── agents.ts        # Paginated agent list with cache
 │       ├── credit-score.ts  # Credit score computation
 │       ├── economy.ts       # AgentEconomyRegistry client
-│       └── data-marketplace.ts  # DataListingRegistry + DataEscrow client
+│       ├── data-marketplace.ts  # DataListingRegistry + DataEscrow client
+│       ├── agent-validator.ts   # Agent card fetch + health check validation
+│       ├── agent-reports.ts     # Live feed data from deployed agents
+│       └── agent-logos.ts   # Agent logo resolution
 └── memfil/                  # Filecoin memory CLI
     ├── src/                 # TypeScript source (Commander.js CLI)
+    │   ├── commands/upload.ts   # Upload file to Filecoin via Synapse
+    │   └── commands/download.ts # Download file by PieceCID
     └── SKILL.md             # Cursor/AI agent skill definition
 ```
 
@@ -214,12 +248,18 @@ FILECOIN_CALIBRATION_RPC_URL=https://api.calibration.node.glif.io/rpc/v1
 SEPOLIA_RPC=
 
 # Economy contract (deploy with erc-8004-contracts scripts first)
-AGENT_ECONOMY_REGISTRY_ADDRESS=0x...
+AGENT_ECONOMY_REGISTRY_ADDRESS=0x87ca5e54a3afd16f3ff5101ffbede586bac1292a
 
 # Data marketplace contracts (defaults set in lib/data-marketplace.ts)
 DATA_LISTING_REGISTRY_ADDRESS=
 DATA_ESCROW_ADDRESS=
 USDC_ADDRESS=
+
+# Live agent feed URLs (optional — public defaults used)
+SEO_AGENT_URL=
+INVESTOR_FINDER_URL_PUBLIC=
+COMPETITOR_ANALYSER_URL=
+BRAND_AGENT_URL=
 ```
 
 ### FilCraft CLI

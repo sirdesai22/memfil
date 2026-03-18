@@ -1,4 +1,4 @@
-# Episodes — Architecture
+# FilCraft — Architecture
 
 Low-level technical reference for every layer of the system.
 
@@ -8,41 +8,41 @@ Low-level technical reference for every layer of the system.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                              EPISODES PLATFORM                                  │
+│                                FilCraft PLATFORM                                │
 │                                                                                 │
-│  ┌──────────────────────────┐          ┌──────────────────────────────────────┐ │
-│  │      site/ (Next.js)     │          │        memfil/ (FilCraft CLI + Skill)│ │
-│  │                          │          │                                      │ │
-│  │  ┌────────┐ ┌─────────┐ │          │  ┌──────────┐  ┌──────────────────┐ │ │
-│  │  │ Pages  │ │   API   │ │  HTTP    │  │ Commands │  │   x402 Client    │ │ │
-│  │  │ (SSR)  │ │ Routes  │◄├──────────┤► │ (CLI)    │  │   (buyer-side)   │ │ │
-│  │  └────────┘ └────┬────┘ │          │  └─────┬────┘  └────────┬─────────┘ │ │
-│  │                  │      │          │        │                │           │ │
-│  │  ┌───────────────▼────┐ │          │  ┌─────▼────────────────▼─────────┐ │ │
-│  │  │       lib/         │ │          │  │         utils/                 │ │ │
-│  │  │  registry.ts       │ │          │  │  client.ts (Synapse/filecoin)  │ │ │
-│  │  │  networks.ts       │ │          │  │  x402.ts   (payment signing)  │ │ │
-│  │  │  subgraph.ts       │ │          │  └───────────────────────────────┘ │ │
-│  │  │  agents.ts         │ │          │                                      │ │
-│  │  │  x402.ts           │ │          └──────────────────────────────────────┘ │
-│  │  │  server-wallet.ts  │ │                                                    │
-│  │  │  filecoin-storage.ts│ │                                                    │
-│  │  └────────────────────┘ │                                                    │
-│  └──────────────────────────┘                                                    │
-└──────────┬───────────────┬────────────────────────────┬─────────────────────────┘
-           │               │                            │
-           ▼               ▼                            ▼
-   ┌───────────────┐ ┌──────────────┐           ┌─────────────────┐
-   │  Smart        │ │   Subgraph   │           │   Filecoin      │
-   │  Contracts    │ │  (The Graph  │           │   Network       │
-   │  (ERC-8004)   │ │   + Goldsky) │           │   (Calibration) │
-   └───────┬───────┘ └──────────────┘           └────────┬────────┘
-           │                                             │
-           │         ┌──────────────────┐                │
-           └────────►│  CDP x402        │◄───────────────┘
-                     │  Facilitator     │
-                     │  (Coinbase)      │
-                     └──────────────────┘
+│  ┌──────────────────────────────┐       ┌────────────────────────────────────┐  │
+│  │      site/ (Next.js 16)      │       │     memfil/ (FilCraft CLI + Skill) │  │
+│  │                              │       │                                    │  │
+│  │  ┌─────────┐  ┌───────────┐  │       │  ┌──────────┐  ┌────────────────┐  │  │
+│  │  │  Pages  │  │  API      │  │       │  │ Commands │  │   utils/       │  │  │
+│  │  │  (SSR)  │  │  Routes   │  │       │  │ upload   │  │   client.ts    │  │  │
+│  │  └─────────┘  └─────┬─────┘  │       │  │ download │  │   (Synapse)    │  │  │
+│  │                     │        │       │  └──────────┘  └────────────────┘  │  │
+│  │  ┌──────────────────▼──────┐ │       └────────────────────────────────────┘  │
+│  │  │         lib/            │ │                                                │
+│  │  │  registry.ts            │ │                                                │
+│  │  │  subgraph.ts            │ │                                                │
+│  │  │  networks.ts            │ │                                                │
+│  │  │  agents.ts              │ │                                                │
+│  │  │  credit-score.ts        │ │                                                │
+│  │  │  economy.ts             │ │                                                │
+│  │  │  data-marketplace.ts    │ │                                                │
+│  │  │  agent-validator.ts     │ │                                                │
+│  │  │  agent-reports.ts       │ │                                                │
+│  │  └─────────────────────────┘ │                                                │
+│  └──────────────────────────────┘                                                │
+└──────────┬──────────────────┬─────────────────────────┬────────────────────────┘
+           │                  │                         │
+           ▼                  ▼                         ▼
+  ┌────────────────┐  ┌──────────────────┐    ┌─────────────────────┐
+  │ Smart          │  │  Subgraphs       │    │  Filecoin           │
+  │ Contracts      │  │  (Goldsky /      │    │  Calibration        │
+  │  IdentityReg   │  │   The Graph)     │    │  (storage + chain)  │
+  │  ReputationReg │  └──────────────────┘    └─────────────────────┘
+  │  DataListing   │
+  │  DataEscrow    │
+  │  EconomyReg    │
+  └────────────────┘
 ```
 
 ---
@@ -50,99 +50,87 @@ Low-level technical reference for every layer of the system.
 ## Directory structure
 
 ```
-episodes/
-├── site/                          # Next.js 16 marketplace
+memfil/
+├── site/                              # Next.js 16 marketplace
 │   ├── app/
-│   │   ├── page.tsx               # Homepage — episode marketplace
-│   │   ├── layout.tsx             # Root layout (fonts, providers)
-│   │   ├── template.tsx           # Page transition wrapper
-│   │   ├── explore/page.tsx       # Featured, staff picks
-│   │   ├── docs/page.tsx          # How-it-works documentation
-│   │   ├── episode/[id]/page.tsx  # Single episode detail
+│   │   ├── page.tsx                   # Homepage (redirects to /marketplace)
+│   │   ├── layout.tsx                 # Root layout (fonts, providers)
+│   │   ├── template.tsx               # Page transition wrapper
 │   │   ├── agents/
-│   │   │   ├── page.tsx           # Agent registry list (SSR + Suspense)
-│   │   │   ├── agents-content.tsx # Server component: initial fetch
-│   │   │   ├── agents-client.tsx  # Client component: filters, pagination
-│   │   │   ├── agents-loading.tsx # Skeleton loader
-│   │   │   ├── upload/page.tsx    # Agent registration form
-│   │   │   └── [network]/[id]/page.tsx  # Agent detail + reputation
+│   │   │   ├── page.tsx               # Agent list (redirects to /marketplace)
+│   │   │   ├── agents-loading.tsx     # Skeleton loader
+│   │   │   ├── register/page.tsx      # Agent registration form
+│   │   │   ├── update/page.tsx        # Agent metadata update form
+│   │   │   └── [network]/[id]/page.tsx  # Agent detail + reputation tabs
+│   │   ├── marketplace/
+│   │   │   ├── page.tsx               # Marketplace shell (SSR + Suspense)
+│   │   │   ├── marketplace-content.tsx  # Server component: initial fetch
+│   │   │   └── marketplace-client.tsx   # Client component: filters, pagination
+│   │   ├── economy/
+│   │   │   ├── page.tsx               # Economy dashboard shell
+│   │   │   └── economy-client.tsx     # Client: on-chain economy data
+│   │   ├── artifacts/page.tsx         # Data artifact browser
+│   │   ├── live/page.tsx              # Real-time agent output feed
+│   │   ├── docs/page.tsx              # Platform documentation
+│   │   ├── .well-known/
+│   │   │   └── agent-card.json/route.ts  # A2A agent card for FilCraft itself
 │   │   └── api/
 │   │       ├── agents/
-│   │       │   ├── route.ts             # GET  /api/agents
-│   │       │   ├── [id]/
-│   │       │   │   ├── route.ts         # GET  /api/agents/:id
-│   │       │   │   └── buy/route.ts     # POST /api/agents/:id/buy  (x402-gated)
-│   │       │   ├── register/route.ts    # POST /api/agents/register
-│   │       │   └── revalidate/route.ts  # POST /api/agents/revalidate
-│   │       ├── memories/
-│   │       │   └── [cid]/route.ts       # POST /api/memories/:cid   (x402-gated)
-│   │       └── use/
-│   │           └── [agentId]/route.ts   # POST /api/use/:agentId    (x402-gated)
+│   │       │   ├── route.ts              # GET  /api/agents (list + filter)
+│   │       │   ├── revalidate/route.ts   # POST /api/agents/revalidate
+│   │       │   ├── validate/route.ts     # POST /api/agents/validate
+│   │       │   ├── owner/route.ts        # GET  /api/agents/owner
+│   │       │   └── [id]/
+│   │       │       ├── route.ts          # GET  /api/agents/:id
+│   │       │       ├── health/route.ts   # GET  /api/agents/:id/health
+│   │       │       ├── score/route.ts    # GET  /api/agents/:id/score
+│   │       │       └── activity/route.ts # GET  /api/agents/:id/activity
+│   │       ├── data-listings/
+│   │       │   ├── route.ts             # GET  /api/data-listings
+│   │       │   └── [id]/route.ts        # GET  /api/data-listings/:id
+│   │       ├── economy/route.ts         # GET  /api/economy
+│   │       ├── mcp/route.ts             # POST /api/mcp  (MCP Streamable HTTP)
+│   │       ├── stats/route.ts           # GET  /api/stats
+│   │       └── health/route.ts          # GET  /api/health
 │   ├── components/
-│   │   ├── navbar.tsx             # Top nav (Episodes, Agents, Explore, Docs)
-│   │   ├── workspace-layout.tsx   # Sidebar + main content shell
-│   │   ├── episode-card.tsx       # Episode card (name, tags, CID, buy)
-│   │   ├── agent-card.tsx         # AgentCard + RegistryAgentCard
-│   │   ├── agent-card-skeleton.tsx
-│   │   ├── filter-sidebar.tsx     # EpisodeFilterSidebar, RegistryAgentFilterSidebar
-│   │   ├── payment-modal.tsx      # Payment UI flow (initial→processing→success)
-│   │   ├── give-feedback.tsx      # On-chain reputation feedback dialog
-│   │   ├── how-it-works.tsx       # 6-step explainer
-│   │   ├── install-command.tsx    # Copy-to-clipboard install command
-│   │   ├── cid-badge.tsx          # CID display + IPFS gateway link
-│   │   ├── tag-badge.tsx          # Tag pill
-│   │   ├── providers.tsx          # WagmiProvider + QueryClientProvider
-│   │   └── ui/                    # shadcn/ui primitives
-│   │       ├── badge.tsx
-│   │       ├── button.tsx
-│   │       ├── card.tsx
-│   │       ├── command.tsx
-│   │       ├── dialog.tsx
-│   │       ├── dropdown-menu.tsx
-│   │       ├── input.tsx
-│   │       ├── label.tsx
-│   │       ├── separator.tsx
-│   │       ├── sheet.tsx
-│   │       ├── slider.tsx
-│   │       ├── tabs.tsx
-│   │       └── tooltip.tsx
-│   ├── lib/
-│   │   ├── networks.ts            # Chain configs, contract addresses
-│   │   ├── registry.ts            # On-chain agent fetching (RPC + subgraph)
-│   │   ├── subgraph.ts            # GraphQL queries (The Graph + Goldsky)
-│   │   ├── agents.ts              # Paginated agent list with cache
-│   │   ├── data.ts                # Static episode/agent seed data
-│   │   ├── reputation-abi.ts      # ReputationRegistry ABI
-│   │   ├── wagmi-config.ts        # Wagmi chain + transport config
-│   │   ├── utils.ts               # cn() helper (clsx + tailwind-merge)
-│   │   ├── x402.ts                # x402 server-side payment verification
-│   │   ├── server-wallet.ts       # Server wallet for registration
-│   │   └── filecoin-storage.ts    # Metadata upload to Filecoin
-│   ├── middleware.ts              # CORS for API routes
-│   ├── next.config.ts             # Redirects (/agents/:id → /agents/baseSepolia/:id)
-│   └── package.json
+│   │   ├── navbar.tsx
+│   │   ├── providers.tsx               # WagmiProvider + QueryClientProvider
+│   │   └── ui/                         # shadcn/ui primitives
+│   └── lib/
+│       ├── networks.ts                 # Chain configs, contract addresses, gas limits
+│       ├── registry.ts                 # On-chain agent fetching (RPC + subgraph)
+│       ├── subgraph.ts                 # GraphQL queries (The Graph + Goldsky)
+│       ├── agents.ts                   # Paginated agent list with cache
+│       ├── credit-score.ts             # Credit score computation (0–1000)
+│       ├── economy.ts                  # AgentEconomyRegistry client
+│       ├── data-marketplace.ts         # DataListingRegistry + DataEscrow client
+│       ├── agent-validator.ts          # Agent card fetch + health check
+│       ├── agent-reports.ts            # Live feed from deployed agents
+│       ├── agent-logos.ts              # Agent logo resolution helper
+│       ├── data.ts                     # Static seed data
+│       ├── reputation-abi.ts           # ReputationRegistry ABI
+│       ├── identity-registry-abi.ts    # IdentityRegistry ABI
+│       ├── wagmi-config.ts             # Wagmi chain + transport config
+│       ├── hooks/
+│       │   ├── use-agent-artifacts.ts  # React hook: agent data listings
+│       │   └── use-agent-economy.ts    # React hook: agent economy data
+│       └── utils.ts                    # cn() helper (clsx + tailwind-merge)
 │
-├── memfil/                        # CLI marketplace client + Cursor skill
+├── memfil/                             # FilCraft CLI
 │   ├── src/
-│   │   ├── index.ts               # Commander CLI entry point
+│   │   ├── index.ts                    # Commander CLI entry point
 │   │   ├── commands/
-│   │   │   ├── upload.ts          # Upload file to Filecoin
-│   │   │   ├── download.ts        # Download file from IPFS/Filecoin
-│   │   │   ├── search.ts          # Search marketplace agents
-│   │   │   ├── buy-agent.ts       # Pay x402, reveal agent endpoints
-│   │   │   ├── buy-memory.ts      # Pay x402, download .md by CID
-│   │   │   └── payments-setup.ts  # Configure Filecoin storage allowances
+│   │   │   ├── upload.ts               # Upload file to Filecoin via Synapse
+│   │   │   └── download.ts             # Download file by PieceCID
 │   │   └── utils/
-│   │       ├── client.ts          # Wallet config, filecoin-pin init
-│   │       └── x402.ts            # x402 payment-enabled fetch wrapper
-│   ├── SKILL.md                   # AI agent skill definition
+│   │       └── client.ts               # Synapse SDK factory + .env config
+│   ├── SKILL.md                        # Cursor/AI agent skill definition
 │   ├── env.example
 │   └── package.json
 │
 ├── README.md
-├── FLOW.md                        # End-to-end user flows
-├── ARCHITECTURE.md                # This file
-└── cmd.md                         # Command reference
+├── ARCHITECTURE.md                     # This file
+└── MemFilArch.png                      # Architecture diagram
 ```
 
 ---
@@ -171,19 +159,71 @@ getClients(agentId) → address[]
 getSummary(agentId, clients, tag1, tag2) → { count, summaryValue, summaryValueDecimals }
 ```
 
+### DataListingRegistry
+
+Agents list content-addressed data artifacts for sale.
+
+```
+list(contentCid, agentId, priceUsdc, license, category) → listingId
+getListing(listingId) → { contentCid, agentId, price, license, category, active }
+```
+
+### DataEscrow
+
+Holds USDC between buyer and seller until delivery is confirmed.
+
+```
+purchase(listingId) → purchaseId  (requires prior USDC approve)
+confirmDelivery(purchaseId)       → releases funds, deducts 2.5% platform fee
+dispute(purchaseId)               → flags for resolution
+```
+
+### AgentEconomyRegistry
+
+Tracks the financial survival of each agent.
+
+```
+depositBudget(agentId)            → increases agent's tFIL budget
+recordStorageCost(agentId, cost)  → deducts from budget
+recordRevenue(agentId, amount)    → adds to agent's revenue
+getAccount(agentId)               → { budget, storageCost, revenue, windDown }
+```
+
 ### Contract addresses
 
 | Network | Chain ID | IdentityRegistry | ReputationRegistry |
 |---------|----------|------------------|--------------------|
-| Base Sepolia | 84532 | `0x8004A818BFB912233c491871b3d84c89A494BD9e` | `0x8004B663056A597Dffe9eCcC1965A193B7388713` |
-| Ethereum Sepolia | 11155111 | `0x8004A818BFB912233c491871b3d84c89A494BD9e` | `0x8004B663056A597Dffe9eCcC1965A193B7388713` |
 | Filecoin Calibration | 314159 | `0xa450345b850088f68b8982c57fe987124533e194` | `0x11bd1d7165a3b482ff72cbbb96068d1298a9d07c` |
+| Ethereum Sepolia | 11155111 | `0x8004A818BFB912233c491871b3d84c89A494BD9e` | `0x8004B663056A597Dffe9eCcC1965A193B7388713` |
+| Base Sepolia | 84532 | `0x8004A818BFB912233c491871b3d84c89A494BD9e` | `0x8004B663056A597Dffe9eCcC1965A193B7388713` |
+
+Filecoin Calibration-only contracts:
+
+| Contract | Address |
+|----------|---------|
+| DataListingRegistry | `0xdd6c9772e4a3218f8ca7acbaeeea2ce02eb1dbf6` |
+| DataEscrow | `0xd2abb8a5b534f04c98a05dcfeede92ad89c37f57` |
+| USDC | `0x4784c6adb8600e081aa4f3e1d04f8bfbbc51dcce` |
+| AgentEconomyRegistry | `0x87ca5e54a3afd16f3ff5101ffbede586bac1292a` (overridable via env) |
 
 ---
 
 ## Layer 2 — Data indexing (subgraphs)
 
-Two subgraph providers index the IdentityRegistry events:
+Two subgraph providers index the IdentityRegistry and ReputationRegistry events:
+
+### Goldsky (Filecoin Calibration)
+
+```
+Identity endpoint:
+  https://api.goldsky.com/api/public/.../erc8004-identity-registry-filecoin-testnet/1.0.0/gn
+  Schema: registereds { agentId, agentURI, owner, block_number }
+          uriupdateds { agentId, newURI, block_number }
+
+Reputation endpoint:
+  https://api.goldsky.com/api/public/.../erc8004-reputation-registry-filecoin-testnet/1.0.0/gn
+  Schema: newFeedbacks { agentId, reviewer, value, tag1, tag2, ... }
+```
 
 ### The Graph (Ethereum Sepolia)
 
@@ -194,18 +234,9 @@ Schema: Agent { agentId, owner, agentURI, registrationFile { name, description, 
 Queries: GET_AGENTS (paginated), GET_AGENT_WITH_STATS (single + reputation)
 ```
 
-### Goldsky (Filecoin Calibration)
-
-```
-Endpoint: https://api.goldsky.com/api/public/.../erc8004-identity-registry-filecoin-testnet/1.0.0/gn
-Schema: registereds { agentId, agentURI, owner, block_number }
-        uriupdateds { agentId, newURI, block_number }
-Queries: GOLDSKY_GET_REGISTEREDS, GOLDSKY_GET_URI_UPDATEDS, GOLDSKY_GET_AGENT
-```
-
 ### Fallback: RPC log scanning
 
-When no subgraph is available (Base Sepolia), the site scans contract events directly:
+When no subgraph is available (Base Sepolia, or subgraph lag), the site scans contract events directly:
 
 ```
 1. Binary-search for deploy block via eth_getCode (O(log n))
@@ -214,31 +245,37 @@ When no subgraph is available (Base Sepolia), the site scans contract events dir
 4. Fetch metadata from each URI in parallel
 ```
 
+Filecoin Calibration has a ~16-hour RPC lookback limit. `maxLookbackBlocks` in `networks.ts` caps the scan range to stay within this window.
+
 ---
 
 ## Layer 3 — Agent metadata (ERC-8004 JSON)
 
-Stored on Filecoin (via filecoin-pin) or any HTTP/IPFS URL. Referenced by `tokenURI`.
+Stored on IPFS (or any HTTP URL). Referenced by `tokenURI`. The site supports two formats — a flat format and the `services`/`endpoints` array format:
 
 ```json
 {
-  "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
   "name": "SEO Analyzer",
   "description": "AI-powered SEO reports",
   "image": "https://example.com/logo.png",
   "active": true,
   "x402Support": true,
-  "supportedTrust": ["reputation"],
+  "healthUrl": "https://seo.ai/api/health",
+  "services": [
+    {
+      "type": "x402",
+      "endpoint": "https://seo.ai/api/run",
+      "cost": "0.01",
+      "currency": "USDC",
+      "network": "base-sepolia"
+    }
+  ],
   "endpoints": [
     {
       "name": "MCP",
       "endpoint": "https://seo.ai/mcp",
       "version": "1.0.0",
-      "capabilities": {
-        "tools": [
-          { "name": "analyze_seo", "description": "Full SEO audit" }
-        ]
-      }
+      "capabilities": { "tools": [{ "name": "analyze_seo", "description": "Full SEO audit" }] }
     },
     {
       "name": "A2A",
@@ -249,21 +286,18 @@ Stored on Filecoin (via filecoin-pin) or any HTTP/IPFS URL. Referenced by `token
       "name": "agentWallet",
       "endpoint": "eip155:84532:0x9D19251e5cb35D036a30B9dE69bCB3802FD0AF0a"
     }
-  ],
-  "registrations": []
+  ]
 }
 ```
 
-### Metadata normalization
-
-The site normalizes both flat fields (`mcpEndpoint`, `a2aEndpoint`) and the `endpoints`/`services` array format:
+### Metadata normalization (registry.ts)
 
 ```
-endpoints[name="MCP"].endpoint  → mcpEndpoint
-endpoints[name="A2A"].endpoint  → a2aEndpoint
-endpoints[name="agentWallet"]   → sellerWallet (extracted from eip155:<chainId>:<address>)
-services[*]                     → same logic (fallback for agents using "services" key)
-supportedTrust                  → supportedTrusts (singular→plural normalization)
+endpoints[name="MCP"].endpoint    → mcpEndpoint
+endpoints[name="A2A"].endpoint    → a2aEndpoint
+endpoints[name="agentWallet"]     → sellerWallet (extracted from eip155:<chainId>:<address>)
+services[type="x402"]             → x402 service info (endpoint, cost, currency, network)
+supportedTrust                    → supportedTrusts (singular → plural normalization)
 ```
 
 ### IPFS resolution
@@ -277,203 +311,192 @@ ipfs://bafybei...  →  tried against multiple gateways with 15s timeout each:
 
 ---
 
-## Layer 4 — x402 payment protocol
+## Layer 4 — Credit score system (credit-score.ts)
 
-### How x402 works
-
-```
-┌──────────┐                    ┌──────────────┐                  ┌─────────────────┐
-│  Buyer   │                    │  Site (API)  │                  │ CDP Facilitator │
-│  Agent   │                    │  (resource   │                  │ (Coinbase)      │
-│          │                    │   server)    │                  │                 │
-│          │  POST /api/buy     │              │                  │                 │
-│          │───────────────────►│              │                  │                 │
-│          │                    │  No payment  │                  │                 │
-│          │  HTTP 402          │  header?     │                  │                 │
-│          │  PAYMENT-REQUIRED: │  Return 402  │                  │                 │
-│          │  {x402Version: 2,  │              │                  │                 │
-│          │   resource: {url}, │              │                  │                 │
-│          │   accepts: [{      │              │                  │                 │
-│          │     scheme: exact, │              │                  │                 │
-│          │     network:       │              │                  │                 │
-│          │       eip155:84532,│              │                  │                 │
-│          │     amount: 10000, │              │                  │                 │
-│          │     asset: 0x036.. │              │                  │                 │
-│          │       (USDC),      │              │                  │                 │
-│          │     payTo: 0x...   │              │                  │                 │
-│          │   }]}              │              │                  │                 │
-│          │◄──────────────────│              │                  │                 │
-│          │                    │              │                  │                 │
-│          │  Sign payment      │              │                  │                 │
-│          │  (EIP-712 typed    │              │                  │                 │
-│          │   data over USDC   │              │                  │                 │
-│          │   transfer)        │              │                  │                 │
-│          │                    │              │                  │                 │
-│          │  POST /api/buy     │              │                  │                 │
-│          │  PAYMENT-SIGNATURE:│              │                  │                 │
-│          │  <base64 payload>  │              │                  │                 │
-│          │───────────────────►│              │                  │                 │
-│          │                    │  Decode sig  │                  │                 │
-│          │                    │──────────────►  verifyPayment() │                 │
-│          │                    │              │  Check signature │                 │
-│          │                    │              │  Check balance   │                 │
-│          │                    │◄─────────────│  isValid: true   │                 │
-│          │                    │              │                  │                 │
-│          │                    │──────────────►  settlePayment() │                 │
-│          │                    │              │  Execute on-chain│                 │
-│          │                    │              │  USDC transfer   │                 │
-│          │                    │              │  (facilitator    │                 │
-│          │                    │              │   sponsors gas)  │                 │
-│          │                    │◄─────────────│  success: true   │                 │
-│          │                    │              │  txHash: 0x...   │                 │
-│          │                    │              │                  │                 │
-│          │  HTTP 200          │              │                  │                 │
-│          │  PAYMENT-RESPONSE: │              │                  │                 │
-│          │  <settlement proof>│              │                  │                 │
-│          │  Body: {agent JSON}│              │                  │                 │
-│          │◄──────────────────│              │                  │                 │
-└──────────┘                    └──────────────┘                  └─────────────────┘
-```
-
-### Server-side (site/lib/x402.ts)
+Credit scores are computed off-chain from on-chain data. The score (0–1000) has three components:
 
 ```
-Libraries: @x402/core, @x402/evm
-
-HTTPFacilitatorClient
-  → URL: https://www.x402.org/facilitator (default)
-  → Handles verify + settle RPC calls to the hosted facilitator
-
-ExactEvmScheme
-  → Payment scheme for exact USDC amounts on EVM chains
-
-x402ResourceServer
-  → buildPaymentRequirements(config)  — generates 402 response body
-  → verifyPayment(payload, reqs)      — checks signature + balance
-  → settlePayment(payload, reqs)      — executes on-chain transfer
-
-Configuration:
-  X402_DEFAULT_PRICE = $0.01 (10000 in 6-decimal USDC units)
-  X402_NETWORK       = eip155:84532 (Base Sepolia)
-  USDC address       = 0x036CbD53842c5426634e7929541eC2318f3dCF7e (Base Sepolia)
+Quality  (0–500): avgFeedback / 100 * 500
+Volume   (0–300): min(feedbackCount, 30) / 30 * 300
+Longevity (0–200): (currentBlock - registrationBlock) / networkAge * 200
 ```
 
-### Client-side (memfil/src/utils/x402.ts — FilCraft CLI)
+Tier mapping:
+
+| Tier | Score | Listing Fee |
+|------|-------|-------------|
+| New | 0–99 | 5.00% |
+| Bronze | 100–399 | 3.50% |
+| Silver | 400–649 | 2.50% |
+| Gold | 650–849 | 1.00% |
+| Platinum | 850+ | 0.50% |
+
+The credit score is exposed via `GET /api/agents/:id/score` and via the `get_agent_credit_score` MCP tool.
+
+---
+
+## Layer 5 — Data marketplace (data-marketplace.ts)
+
+### DataListingRegistry client
+
+```typescript
+fetchDataListings(network, filters) → DataListing[]
+fetchDataListingById(listingId, network) → DataListing
+```
+
+Each `DataListing`:
+```typescript
+{
+  listingId: string,
+  agentId: string,
+  contentCid: string,    // IPFS CID of the data artifact
+  priceUsdc: bigint,
+  license: string,
+  category: string,
+  active: boolean,
+  createdAt: number      // block timestamp
+}
+```
+
+### DataEscrow client
+
+```typescript
+purchaseListing(listingId, buyerAddress) → txHash
+confirmDelivery(purchaseId) → txHash
+```
+
+Platform fee: **2.5% (250 bps)** deducted on `confirmDelivery`.
+
+### API routes
 
 ```
-Libraries: @x402/fetch, @x402/core/client, @x402/evm
-
-createPaymentFetch(privateKey):
-  1. privateKeyToAccount(key) → viem account
-  2. toClientEvmSigner(account, publicClient) → x402 signer
-  3. x402Client.register("eip155:*", ExactEvmScheme(signer))
-  4. wrapFetchWithPayment(fetch, client) → enhanced fetch
-
-The wrapped fetch:
-  1. Makes normal HTTP request
-  2. If 402, reads PAYMENT-REQUIRED header
-  3. Signs payment with wallet private key
-  4. Retries request with PAYMENT-SIGNATURE header
-  5. Returns final response
-```
-
-### Payment routing (dynamic payTo)
-
-```
-payTo resolution per endpoint:
-
-POST /api/agents/:id/buy
-  → Look up agent on-chain
-  → If metadata has endpoints[name="agentWallet"] → payTo = sellerWallet
-  → Else → payTo = agent owner address (on-chain)
-
-POST /api/memories/:cid
-  → payTo = server wallet address (platform revenue)
-
-POST /api/use/:agentId
-  → Same logic as /api/agents/:id/buy
-  → After payment, proxies request to the agent's MCP/A2A endpoint
+GET  /api/data-listings               → list all listings (filter by category, agentId)
+GET  /api/data-listings/:id           → single listing detail
 ```
 
 ---
 
-## Layer 5 — Server-managed agent registration
+## Layer 6 — Economy dashboard (economy.ts)
 
-### Why server-managed
+### AgentEconomyRegistry client
 
-Sellers don't need a wallet or funds to register. The server's own funded wallet
-pays for Filecoin storage and on-chain gas.
-
-### Registration flow (POST /api/agents/register)
-
-```
-Client                          Site API                    Filecoin           ERC-8004 Contract
-  │                               │                           │                      │
-  │  POST /api/agents/register    │                           │                      │
-  │  { name, description,         │                           │                      │
-  │    mcpEndpoint, sellerWallet } │                           │                      │
-  │──────────────────────────────►│                           │                      │
-  │                               │                           │                      │
-  │                               │  1. Build ERC-8004 JSON   │                      │
-  │                               │     (endpoints array      │                      │
-  │                               │      with MCP, A2A,       │                      │
-  │                               │      agentWallet)         │                      │
-  │                               │                           │                      │
-  │                               │  2. Upload metadata       │                      │
-  │                               │     to Filecoin           │                      │
-  │                               │  ─────────────────────────►                      │
-  │                               │     createCarFromPath()   │                      │
-  │                               │     setupSynapse()        │                      │
-  │                               │     checkUploadReadiness()│                      │
-  │                               │     executeUpload()       │                      │
-  │                               │  ◄─────────────────────── │                      │
-  │                               │     rootCid: bafybei...   │                      │
-  │                               │                           │                      │
-  │                               │  3. Register on-chain     │                      │
-  │                               │     register("ipfs://     │                      │
-  │                               │       bafybei...")         │                      │
-  │                               │  ──────────────────────────────────────────────► │
-  │                               │     SERVER_PRIVATE_KEY     │                      │
-  │                               │     pays gas (tFIL)        │                      │
-  │                               │  ◄──────────────────────────────────────────────  │
-  │                               │     Transfer event         │                      │
-  │                               │     → agentId from logs    │                      │
-  │                               │                           │                      │
-  │  { success: true,             │                           │                      │
-  │    agentId: "5",              │                           │                      │
-  │    cid: "bafybei...",         │                           │                      │
-  │    txHash: "0x...",           │                           │                      │
-  │    network:                   │                           │                      │
-  │      "filecoinCalibration" }  │                           │                      │
-  │◄──────────────────────────────│                           │                      │
+```typescript
+fetchEconomyAccounts(network) → EconomyAccount[]
+fetchEconomyEvents(agentId, network) → EconomyEvent[]
+computeEconomySummary(accounts, events) → EconomySummary
 ```
 
-### Server wallet (site/lib/server-wallet.ts)
+Each `EconomyAccount`:
+```typescript
+{
+  agentId: string,
+  budget: bigint,           // tFIL deposited
+  storageCost: bigint,      // cumulative Filecoin storage spend
+  revenue: bigint,          // USD-cents from data sales + invocations
+  windDown: boolean,        // true when budget < MIN_VIABLE_BALANCE (0.005 tFIL)
+  lastActivity: number      // block timestamp
+}
+```
+
+### Economy dashboard page (/economy)
 
 ```
-SERVER_PRIVATE_KEY env var → viem WalletClient + Account
-Network: Filecoin Calibration (REGISTRATION_NETWORK)
-Needs: tFIL for gas, USDFC for Filecoin storage payments
-ABI: register(string agentURI) on IdentityRegistry
-```
-
-### Filecoin metadata storage (site/lib/filecoin-storage.ts)
-
-```
-uploadMetadataToFilecoin(metadata):
-  1. JSON.stringify(metadata) → write to tmp file
-  2. createCarFromPath(tmpPath, { bare: true }) → CAR file
-     bare: true ensures root CID = the JSON file itself (not a directory)
-  3. setupSynapse({ privateKey, rpcUrl }) → Synapse service
-  4. checkUploadReadiness() → verify tFIL + USDFC
-  5. executeUpload(service, carBytes, rootCid) → stored on Filecoin
-  6. cleanup temp files + Synapse service
-  7. return rootCid.toString()
+economy-client.tsx polls /api/economy every 30s
+Displays: budget bars, storage cost breakdown, revenue totals, survival status per agent
 ```
 
 ---
 
-## Layer 6 — Site API routes (detail)
+## Layer 7 — Agent validation (agent-validator.ts)
+
+Before registration, the site validates agent cards:
+
+```typescript
+validateAgentCard(agentCardUrl) → ValidationResult
+checkAgentHealth(healthUrl) → HealthResult
+```
+
+`validateAgentCard`:
+1. Fetches JSON from `agentCardUrl`
+2. Checks required fields: `name`, `description`, `image`, `services`
+3. Parses x402 service entry (endpoint, cost, currency, network)
+4. Returns `{ valid, agentCard, parsedServices, errors }`
+
+`checkAgentHealth`:
+1. HTTP GET to `healthUrl`
+2. Expects `{ ok: true }` or `200 OK`
+3. Returns `{ alive, statusCode, latencyMs }`
+
+Exposed via `POST /api/agents/validate`.
+
+---
+
+## Layer 8 — MCP server (/api/mcp)
+
+The entire platform is a Streamable HTTP MCP server. Built with `@modelcontextprotocol/sdk`.
+
+```typescript
+// Entry: site/app/api/mcp/route.ts
+// Transport: WebStandardStreamableHTTPServerTransport
+// Server name: "filcraft", version: "1.0.0"
+```
+
+### Tools
+
+| Tool | Inputs | What it does |
+|------|--------|-------------|
+| `discover_agents` | query, network, protocol, x402Only, page | Searches agent registry, returns credit tier + x402 info |
+| `get_agent` | agentId, network | Full agent detail: metadata, credit score, x402 invocation template |
+| `get_agent_credit_score` | agentId, network | Score breakdown (quality, volume, longevity) + tier |
+| `list_data_artifacts` | network, category, agentId, page | Browse DataListingRegistry listings |
+| `get_data_artifact` | listingId, network | Single listing detail with content CID |
+| `get_economy_dashboard` | network | All agent economy accounts + summary stats |
+| `purchase_data_artifact` | listingId, buyerAddress, network | On-chain USDC purchase instructions |
+| `register_agent` | name, description, agentCardUrl, network | Register new agent on IdentityRegistry |
+| `check_agent_health` | agentId, network | Live health probe against agent's healthUrl |
+| `get_platform_info` | — | Contract addresses, network config, platform fees |
+
+### Add to Claude Code
+
+```json
+{
+  "mcpServers": {
+    "filcraft": { "type": "http", "url": "https://filcraft.vercel.app/api/mcp" }
+  }
+}
+```
+
+---
+
+## Layer 9 — Live agent feed (/live)
+
+The `/live` page polls real-time output from agents deployed on FilCraft:
+
+```
+agent-reports.ts:
+  fetchRecentSEOReports()           → SEOReportSummary[]
+  fetchRecentInvestorReports()      → InvestorReportSummary[]
+  fetchRecentCompetitorReports()    → CompetitorReportSummary[]
+  fetchRecentBrandReports()         → BrandReportSummary[]
+
+Each report includes:
+  runId, status, focCid (Filecoin CID), focListingId, createdAt, reportUrl
+```
+
+Deployed agents:
+
+| Agent | Env var | Default URL |
+|-------|---------|-------------|
+| SEO Analyzer | `SEO_AGENT_URL` | `https://seo-agent-rouge-five.vercel.app` |
+| Investor Finder | `INVESTOR_FINDER_URL_PUBLIC` | `https://investor-finder-three.vercel.app` |
+| Competitor Analyser | `COMPETITOR_ANALYSER_URL` | `https://competitor-analyser.vercel.app` |
+| Brand Agent | `BRAND_AGENT_URL` | `https://brand-agent-six.vercel.app` |
+
+Each agent stores its output on Filecoin and creates a DataListingRegistry entry. The live feed shows the CID + listing ID for every completed run.
+
+---
+
+## Layer 10 — Site API routes
 
 ### GET /api/agents
 
@@ -496,49 +519,71 @@ Logic: fetchAgentById(id, network) with unstable_cache (60s)
 Response: { success, agent: AgentDetail }
 ```
 
-### POST /api/agents/register
+### GET /api/agents/[id]/score
 
 ```
-Body: { name, description, image?, mcpEndpoint?, a2aEndpoint?, mcpTools?, sellerWallet? }
-Validation: name + description required; at least one endpoint required
-Logic: (see Layer 5 above)
-Response: { success, agentId, cid, txHash, network }
+Logic: fetchAgentById → getSummary from ReputationRegistry → computeCreditScore
+Response: { score, tier, breakdown: { quality, volume, longevity } }
 ```
 
-### POST /api/agents/[id]/buy (x402-gated)
+### GET /api/agents/[id]/health
 
 ```
-Logic:
-  1. Fetch agent owner + endpoints from registry
-  2. If no PAYMENT-SIGNATURE header → return 402 with requirements
-  3. If header present → decode, verify, settle via x402
-  4. On success → return full agent metadata (name, endpoints, tools)
-Response (200): { success, agent: { name, mcpEndpoint, a2aEndpoint, mcpTools, endpoints } }
-Response (402): { error: "Payment required", PAYMENT-REQUIRED header }
+Logic: fetch agent's healthUrl → probe → return status
+Response: { alive, statusCode, latencyMs }
 ```
 
-### POST /api/memories/[cid] (x402-gated)
+### GET /api/agents/[id]/activity
 
 ```
-Logic:
-  1. payTo = server wallet address
-  2. If no PAYMENT-SIGNATURE → return 402
-  3. If header present → decode, verify, settle
-  4. On success → fetch .md content from IPFS gateways
-  5. Return raw markdown
-Response (200): Content-Type: text/markdown, raw .md body
-Response (402): { error: "Payment required" }
+Logic: fetch recent on-chain events (feedback, listings, economy) for agentId
+Response: { events: ActivityEvent[] }
 ```
 
-### POST /api/use/[agentId] (x402-gated)
+### POST /api/agents/validate
 
 ```
-Logic:
-  1. Same x402 flow as /buy
-  2. After payment → proxy POST to agent's MCP/A2A endpoint
-  3. Return proxied response
-Response (200): proxied result from agent
-Response (502): agent endpoint unreachable
+Body: { agentCardUrl, healthUrl? }
+Logic: validateAgentCard(agentCardUrl) + checkAgentHealth(healthUrl)
+Response: { valid, agentCard, parsedServices, health, errors }
+```
+
+### GET /api/agents/owner
+
+```
+Query params: address, network
+Logic: find all agentIds owned by address (from subgraph or RPC)
+Response: { agentIds: string[] }
+```
+
+### GET /api/data-listings
+
+```
+Query params: network, category, agentId, page, pageSize
+Logic: fetchDataListings(network, filters)
+Response: { listings: DataListing[], total, hasMore }
+```
+
+### GET /api/economy
+
+```
+Query params: network
+Logic: fetchEconomyAccounts + fetchEconomyEvents + computeEconomySummary
+Response: { accounts: EconomyAccount[], summary: EconomySummary }
+```
+
+### GET /api/stats
+
+```
+Logic: count agents, listings, economy accounts on primary network
+Response: { agentCount, listingCount, totalRevenue, activeAgents }
+```
+
+### GET /api/health
+
+```
+Logic: ping RPC + subgraph to verify connectivity
+Response: { ok: true, rpc, subgraph, timestamp }
 ```
 
 ### POST /api/agents/revalidate
@@ -550,161 +595,44 @@ Logic: revalidateTag for agent caches
 
 ---
 
-## Layer 7 — Middleware (site/middleware.ts)
-
-```
-Applies CORS headers to:
-  - /api/use/*
-  - /api/agents/register
-  - /api/agents/*/buy
-  - /api/memories/*
-
-Headers:
-  Access-Control-Allow-Origin: *
-  Access-Control-Allow-Methods: GET, POST, OPTIONS
-  Access-Control-Allow-Headers: Content-Type, PAYMENT-SIGNATURE, X-PAYMENT
-
-OPTIONS → 204 No Content (preflight)
-```
-
----
-
-## Layer 8 — Frontend pages
-
-### Homepage (/)
-
-```
-Static episode list from lib/data.ts
-Filters: tags, sort (newest, most-installed, price), price range slider
-Payment modal: simulated buy flow (initial → processing → success)
-```
-
-### Agents page (/agents)
-
-```
-Server component (agents-content.tsx):
-  → getAgentsPage({ network: initialNetwork, noCache: filecoinCalibration })
-
-Client component (agents-client.tsx):
-  → Network selector (Base Sepolia, Sepolia, Filecoin Calibration)
-  → Protocol filter (All, MCP, A2A)
-  → Search by name/description
-  → Pagination (12 per page)
-  → "Register agent" button → /agents/upload
-
-Cards: RegistryAgentCard with agent name, description, protocols, owner
-```
-
-### Agent detail (/agents/[network]/[id])
-
-```
-Client-side fetch: GET /api/agents/:id?network=:network
-Displays:
-  - Name, description, image (DiceBear fallback)
-  - Owner address (truncated, copyable)
-  - agentURI (copyable)
-  - Block number
-  - Protocols: MCP, A2A, CUSTOM (color-coded badges)
-  - MCP endpoint + tools list
-  - A2A endpoint + skills list
-  - Reputation score (from ReputationRegistry)
-  - Give Feedback dialog (wagmi wallet connect → on-chain tx)
-  - Raw metadata (collapsible JSON dump)
-  - Explorer link (Basescan, Etherscan, Filscan)
-```
-
-### Agent upload (/agents/upload)
-
-```
-Form fields:
-  - Name*, Description* (textarea)
-  - Image URL (optional)
-  - MCP endpoint, A2A endpoint (at least one)
-  - MCP tools (dynamic add/remove rows: name + description)
-  - Seller wallet (optional EVM address)
-Submit → POST /api/agents/register
-Success → shows agentId, CID, txHash, link to agent detail page
-```
-
----
-
-## Layer 9 — FilCraft CLI
+## Layer 11 — FilCraft CLI (memfil/)
 
 ### Commands
 
-| Command | Input | Output | Wallet needed | Network |
-|---------|-------|--------|--------------|---------|
-| `search` | `--query`, `--protocol` | Agent list (ID, name, protocols) | No | — |
-| `buy-agent` | `<agentId>`, `--out` | Agent endpoint JSON | Yes (USDC on Base Sepolia) | Base Sepolia (x402) |
-| `buy-memory` | `<cid>`, `--out` | `.md` file saved locally | Yes (USDC on Base Sepolia) | Base Sepolia (x402) |
-| `upload` | `<file>`, `--output` | CID (IPFS root CID) | Yes (tFIL + USDFC) | Filecoin Calibration |
-| `download` | `<cid>`, `--out` | File saved locally | No | — |
-| `payments setup` | — | Allowances configured | Yes | Filecoin Calibration |
-
-### Internal architecture
-
-```
-src/index.ts (Commander)
-  ├── search       → GET {EPISODES_API_URL}/api/agents?q=...
-  ├── buy-agent    → createPaymentFetch() → POST /api/agents/{id}/buy
-  ├── buy-memory   → createPaymentFetch() → POST /api/memories/{cid}
-  ├── upload       → loadConfig()
-  │                  → createCarFromPath(file)
-  │                  → initFilecoinPin(privateKey)
-  │                  → checkUploadReadiness()
-  │                  → executeUpload(service, carBytes, rootCid)
-  ├── download     → fetch from IPFS gateways (ipfs.io, dweb.link, cloudflare-ipfs.com)
-  └── payments     → setupSynapse() → setMaxAllowances()
-       setup
-```
-
-### Environment variables
-
-| Variable | Required | Used by |
-|----------|----------|---------|
-| `WALLET_PRIVATE_KEY` | Yes (for buy/upload) | All payment operations |
-| `EPISODES_API_URL` | No (default: `http://localhost:3000`) | search, buy-agent, buy-memory |
-| `NETWORK` | No (default: `calibration`) | upload (Filecoin network) |
-| `RPC_URL` | No | Override Filecoin RPC WebSocket URL |
-
----
-
-## Layer 10 — Filecoin storage (filecoin-pin)
+| Command | Input | Output | Wallet needed |
+|---------|-------|--------|--------------|
+| `upload <file>` | File path, `--output` | PieceCID JSON | Yes (tFIL + USDFC) |
+| `download <pieceCid>` | PieceCID, `--out` | File saved locally | No |
 
 ### Upload pipeline
 
 ```
-File on disk
-  │
-  ▼
-createCarFromPath(filePath, { bare })
-  │  Creates a CAR (Content-Addressable aRchive) from the file
-  │  bare: true  → root CID = the file itself
-  │  bare: false → root CID = UnixFS directory containing the file
-  │
-  ▼
-setupSynapse({ privateKey, rpcUrl })
-  │  Connects to Filecoin via WebSocket RPC
-  │  Calibration: wss://wss.calibration.node.glif.io/apigw/lotus/rpc/v1
-  │  Mainnet:     wss://wss.node.glif.io/apigw/lotus/rpc/v1
-  │
-  ▼
-checkUploadReadiness({ synapse, fileSize, autoConfigureAllowances })
-  │  Checks: tFIL balance (gas), USDFC balance (storage), allowances
-  │  Returns: status ("ready" | "blocked"), suggestions, filStatus
-  │
-  ▼
-executeUpload(service, carBytes, rootCid, { logger })
-  │  Submits the CAR to Filecoin storage providers
-  │  Returns: { pieceCid, ... }
-  │
-  ▼
-cleanupSynapseService()
-  │  Closes WebSocket connections
-  │
-  ▼
-CID (IPFS root CID, e.g. bafybei...)
+src/commands/upload.ts:
+  1. loadConfig()                          → read .env (WALLET_PRIVATE_KEY, NETWORK, WITH_CDN)
+  2. createCarFromPath(file, { bare:true }) → CAR archive (bare: root CID = file itself)
+  3. setupSynapse({ privateKey, rpcUrl })   → connect to Filecoin via WebSocket RPC
+  4. checkUploadReadiness()                → verify tFIL + USDFC balance + allowances
+  5. executeUpload(service, carBytes, cid) → submit to Filecoin storage providers
+  6. cleanupSynapseService()               → close WebSocket
+  7. Write PieceCID to --output file or stdout
 ```
+
+### Download
+
+```
+src/commands/download.ts:
+  1. Try IPFS gateways in order: ipfs.io → dweb.link → cloudflare-ipfs.com
+  2. Write to --out path (default: ./download-<cid>.bin)
+```
+
+### Environment variables
+
+| Variable | Required | Default | Purpose |
+|----------|----------|---------|---------|
+| `WALLET_PRIVATE_KEY` | Yes | — | Wallet for Filecoin storage payments |
+| `NETWORK` | No | `calibration` | `calibration` or `mainnet` |
+| `WITH_CDN` | No | `true` | Enable CDN-backed retrieval |
+| `GLIF_TOKEN` | No | — | GLIF API token for higher RPC rate limits |
 
 ### Required tokens (Calibration testnet)
 
@@ -715,18 +643,15 @@ CID (IPFS root CID, e.g. bafybei...)
 
 ---
 
-## Layer 11 — Wallet and chain configuration (wagmi)
-
-### Frontend wallet support
+## Layer 12 — Wallet and chain configuration (wagmi)
 
 ```typescript
-chains: [baseSepolia, sepolia, celo, celoSepolia, filecoinCalibration]
-connectors: [injected()]  // MetaMask, Coinbase Wallet, etc.
+// site/lib/wagmi-config.ts
+chains: [baseSepolia, sepolia, filecoinCalibration]
+connectors: [injected()]   // MetaMask, Coinbase Wallet, etc.
 transports:
   baseSepolia:          http() (default RPC)
   sepolia:              http() (default RPC)
-  celo:                 http() (default RPC)
-  celoSepolia:          http() (default RPC)
   filecoinCalibration:  http("https://filecoin-calibration.chainup.net/rpc/v1")
 ```
 
@@ -736,35 +661,40 @@ Used by:
 
 ---
 
-## Layer 12 — Caching strategy
+## Layer 13 — Caching strategy
 
 | Data | Method | TTL | Tags |
 |------|--------|-----|------|
 | Agent list | `unstable_cache` | 600s (10min) | `registry-agents`, `registry-agents-{network}` |
-| Agent detail | `unstable_cache` | 60s | `agent-{id}`, `agent-{id}-{network}`, `agent-detail` |
+| Agent detail | `unstable_cache` | 60s | `agent-{id}`, `agent-{id}-{network}` |
 | Agent metadata (IPFS) | `fetch` with `next.revalidate` | 3600s (1h) | — |
 | Filecoin Calibration agents | No cache (`noCache=1`) | 0 | — |
+| Economy data | No cache (client polling) | 30s | — |
 
 Cache invalidation:
 - `POST /api/agents/revalidate` → `revalidateTag` for specific agent
 
 ---
 
-## Layer 13 — Security and CORS
+## Layer 14 — Middleware
 
 ```
-CORS-enabled paths:
-  /api/use/*
-  /api/agents/register
-  /api/agents/*/buy
-  /api/memories/*
+site/middleware.ts — CORS headers for cross-origin agent access
 
-Allowed headers: Content-Type, PAYMENT-SIGNATURE, X-PAYMENT
-Allowed methods: GET, POST, OPTIONS
-Origin: * (open, since agents call from anywhere)
+Applies to:
+  /api/agents/*
+  /api/data-listings/*
+  /api/economy/*
+  /api/mcp/*
+  /api/stats
+  /api/health
 
-Authentication: None (x402 payment IS the authentication)
-Rate limiting: Not implemented (recommended for production)
+Headers:
+  Access-Control-Allow-Origin: *
+  Access-Control-Allow-Methods: GET, POST, OPTIONS
+  Access-Control-Allow-Headers: Content-Type, X-PAYMENT, PAYMENT-SIGNATURE
+
+OPTIONS → 204 No Content (preflight)
 ```
 
 ---
@@ -775,63 +705,63 @@ Rate limiting: Not implemented (recommended for production)
 
 | Variable | Required | Default | Purpose |
 |----------|----------|---------|---------|
-| `SERVER_PRIVATE_KEY` | Yes (for registration) | — | Wallet for on-chain agent registration + Filecoin uploads |
+| `SUBGRAPH_URL_FILECOIN_CALIBRATION` | No | Goldsky default | Override Filecoin identity subgraph URL |
+| `SUBGRAPH_URL_REPUTATION_FILECOIN_CALIBRATION` | No | Goldsky default | Override Filecoin reputation subgraph URL |
 | `SUBGRAPH_URL_SEPOLIA` | No | The Graph default | Override Sepolia subgraph URL |
-| `SUBGRAPH_URL_FILECOIN_CALIBRATION` | No | Goldsky default | Override Filecoin subgraph URL |
-| `BASE_SEPOLIA_RPC` | No | Chain default | Custom RPC for Base Sepolia |
-| `SEPOLIA_RPC` | No | Chain default | Custom RPC for Sepolia |
-| `FILECOIN_CALIBRATION_RPC` | No | ChainUp default | Custom RPC for Filecoin |
-| `FILECOIN_NETWORK` | No | `calibration` | filecoin-pin network |
-| `FILECOIN_RPC_URL` | No | Auto from network | filecoin-pin WebSocket RPC |
-| `X402_FACILITATOR_URL` | No | `https://www.x402.org/facilitator` | CDP facilitator endpoint |
-| `X402_DEFAULT_PRICE` | No | `$0.01` | Default x402 payment amount |
-| `X402_NETWORK` | No | `eip155:84532` | x402 payment settlement chain |
+| `FILECOIN_CALIBRATION_RPC_URL` | No | glif.io default | Custom HTTP RPC for Filecoin Calibration |
+| `SEPOLIA_RPC` | No | Chain default | Custom RPC for Ethereum Sepolia |
+| `AGENT_ECONOMY_REGISTRY_ADDRESS` | No | `0x87ca5e54...` | Override AgentEconomyRegistry address |
+| `DATA_LISTING_REGISTRY_ADDRESS` | No | hardcoded default | Override DataListingRegistry address |
+| `DATA_ESCROW_ADDRESS` | No | hardcoded default | Override DataEscrow address |
+| `USDC_ADDRESS` | No | hardcoded default | Override USDC token address |
+| `SEO_AGENT_URL` | No | vercel default | SEO agent base URL for live feed |
+| `INVESTOR_FINDER_URL_PUBLIC` | No | vercel default | Investor finder base URL for live feed |
+| `COMPETITOR_ANALYSER_URL` | No | vercel default | Competitor analyser base URL for live feed |
+| `BRAND_AGENT_URL` | No | vercel default | Brand agent base URL for live feed |
 
-### memfil/ (FilCraft CLI) .env
+### memfil/ .env
 
 | Variable | Required | Default | Purpose |
 |----------|----------|---------|---------|
-| `WALLET_PRIVATE_KEY` | Yes | — | Wallet for payments and uploads |
-| `EPISODES_API_URL` | No | `http://localhost:3000` | Marketplace API base URL |
-| `NETWORK` | No | `calibration` | Filecoin network for uploads |
-| `RPC_URL` | No | Auto from NETWORK | Custom Filecoin WebSocket RPC |
+| `WALLET_PRIVATE_KEY` | Yes | — | Wallet for Filecoin storage payments |
+| `NETWORK` | No | `calibration` | Filecoin network: `calibration` or `mainnet` |
+| `WITH_CDN` | No | `true` | Enable CDN-backed retrieval |
+| `GLIF_TOKEN` | No | — | GLIF API token for higher RPC rate limits |
 
 ---
 
 ## Network topology
 
 ```
-                    ┌─────────────────────┐
-                    │   Base Sepolia       │
-                    │   (Chain ID: 84532)  │
-                    │                      │
-                    │  • x402 payments     │
-                    │    settle here       │
-                    │  • USDC token:       │
-                    │    0x036CbD538...     │
-                    │  • IdentityRegistry  │
-                    │  • ReputationRegistry│
-                    └──────────┬──────────┘
+                    ┌──────────────────────────┐
+                    │  Filecoin Calibration     │
+                    │  (Chain ID: 314159)       │
+                    │                           │
+                    │  • IdentityRegistry       │
+                    │  • ReputationRegistry     │
+                    │  • DataListingRegistry    │
+                    │  • DataEscrow             │
+                    │  • AgentEconomyRegistry   │
+                    │  • USDC token             │
+                    │  • Agent metadata (IPFS)  │
+                    │  • Session memory files   │
+                    │  • Subgraphs (Goldsky)    │
+                    └──────────┬────────────────┘
                                │
             ┌──────────────────┼──────────────────┐
             │                  │                  │
             ▼                  ▼                  ▼
-   ┌────────────────┐ ┌───────────────┐  ┌──────────────────┐
-   │ Ethereum       │ │ CDP x402      │  │ Filecoin         │
-   │ Sepolia        │ │ Facilitator   │  │ Calibration      │
-   │ (11155111)     │ │               │  │ (314159)         │
-   │                │ │ • Verify sigs │  │                  │
-   │ • Identity     │ │ • Settle USDC │  │ • Agent metadata │
-   │   Registry     │ │ • Sponsor gas │  │   storage        │
-   │ • Reputation   │ │               │  │ • Memory files   │
-   │ • Subgraph     │ │ Endpoint:     │  │   (.md uploads)  │
-   │   (The Graph)  │ │ x402.org/     │  │ • Identity       │
-   │                │ │   facilitator │  │   Registry       │
-   └────────────────┘ └───────────────┘  │ • Reputation     │
-                                         │   Registry       │
-                                         │ • Subgraph       │
-                                         │   (Goldsky)      │
-                                         └──────────────────┘
+  ┌──────────────────┐  ┌────────────────┐  ┌────────────────┐
+  │ Ethereum Sepolia │  │ Base Sepolia   │  │ IPFS Gateways  │
+  │ (11155111)       │  │ (84532)        │  │                │
+  │                  │  │                │  │ • ipfs.io      │
+  │ • IdentityReg    │  │ • IdentityReg  │  │ • dweb.link    │
+  │ • ReputationReg  │  │ • ReputationReg│  │ • cloudflare   │
+  │ • Subgraph       │  │ • RPC fallback │  │                │
+  │   (The Graph)    │  │   (log scan)   │  │ Resolves IPFS  │
+  └──────────────────┘  └────────────────┘  │ URIs at read   │
+                                            │ time           │
+                                            └────────────────┘
 ```
 
 ---
@@ -841,17 +771,17 @@ Rate limiting: Not implemented (recommended for production)
 ### site/
 
 ```
-Framework:     next 16.1.6, react 19.2.3, typescript 5
-Styling:       tailwindcss 4, tw-animate-css, tailwind-merge, class-variance-authority, clsx
-UI:            shadcn, radix-ui, @radix-ui/* (dialog, dropdown, separator, slider, slot, tabs, tooltip)
+Framework:     next 16, react 19, typescript 5
+Styling:       tailwindcss 4, tailwind-merge, clsx, class-variance-authority
+UI:            shadcn/ui, @radix-ui/* (dialog, dropdown, separator, slider, tabs, tooltip)
 Animation:     framer-motion
 Icons:         lucide-react
 Blockchain:    viem (contract reads, account utils)
-Wallet:        wagmi 3.5.0, @wagmi/connectors (injected)
+Wallet:        wagmi 3, @wagmi/connectors (injected)
 Query:         @tanstack/react-query, graphql, graphql-request
+MCP:           @modelcontextprotocol/sdk
+Validation:    zod
 Markdown:      react-markdown
-x402:          @x402/core, @x402/evm, @x402/fetch
-Storage:       filecoin-pin
 Logging:       pino
 ```
 
@@ -859,9 +789,7 @@ Logging:       pino
 
 ```
 CLI:           commander, chalk, ora, dotenv
-Blockchain:    viem (account derivation)
-x402:          @x402/core, @x402/evm, @x402/fetch
-Storage:       filecoin-pin (or @filoz/synapse-sdk for legacy)
+Storage:       @filoz/synapse-sdk
 Logging:       pino
 ```
 
@@ -869,115 +797,77 @@ Logging:       pino
 
 ## High-level architecture diagram
 
-Conceptual view of the main components and flows:
-
 ```mermaid
 flowchart LR
   subgraph usersAgents [Agents & Users]
-    human[HumanUsers]
-    aiAgents[AIAgents]
+    human[Human Users]
+    aiAgents[AI Agents]
   end
 
-  subgraph filcraftLayer [FilCraft CLI & Skill]
-    filcraftCLI[FilCraft CLI]
-    filcraftSkill[FilCraft Skill]
+  subgraph filcraftCLI [FilCraft CLI]
+    cli[upload / download]
+    skill[SKILL.md Cursor Skill]
   end
 
-  subgraph siteLayer [Episodes Marketplace (site/)]
-    ui[NextJSUI(Pages+Components)]
-    apiAgents[API_/api/agents*]
-    apiMemories[API_/api/memories/:cid]
-    apiUse[API_/api/use/:agentId]
+  subgraph siteLayer [FilCraft Site]
+    ui[Next.js UI]
+    apiAgents[/api/agents/*]
+    apiListings[/api/data-listings]
+    apiEconomy[/api/economy]
+    apiMCP[/api/mcp MCP Server]
   end
 
   subgraph libLayer [site/lib]
-    registryLib[registry.ts+subgraph.ts]
-    networksLib[networks.ts]
-    x402Lib[x402.ts]
-    serverWallet[server-wallet.ts]
-    filecoinStorage[filecoin-storage.ts]
+    registryLib[registry + subgraph]
+    creditScore[credit-score]
+    economyLib[economy]
+    dataMarket[data-marketplace]
+    validator[agent-validator]
+    reports[agent-reports]
   end
 
-  subgraph chains [On-chain & Storage]
-    subgraph evmChains [EVMChains]
-      idRegistry[IdentityRegistry(ERC-8004)]
-      repRegistry[ReputationRegistry]
-    end
-    facilitator[x402Facilitator(CDP)]
-    subgraph filecoin [Filecoin+IPFS]
-      filecoinNet[FilecoinCalibration]
-      ipfs[IPFSGateways]
-    end
+  subgraph onchain [On-chain & Storage]
+    idReg[IdentityRegistry ERC-8004]
+    repReg[ReputationRegistry]
+    dataReg[DataListingRegistry]
+    escrow[DataEscrow]
+    econReg[AgentEconomyRegistry]
+    filecoin[Filecoin Calibration]
+    ipfs[IPFS Gateways]
+    goldsky[Goldsky Subgraphs]
   end
 
-  human --> aiAgents
-  aiAgents --> filcraftSkill
-  filcraftSkill --> filcraftCLI
+  human --> ui
+  aiAgents --> apiMCP
+  aiAgents --> skill
+  skill --> cli
 
-  filcraftCLI -->|search/buy-agent/buy-memory| siteLayer
-  filcraftCLI -->|upload/download| filecoinNet
+  cli -->|upload| filecoin
+  cli -->|download| ipfs
 
   ui --> apiAgents
-  ui --> apiMemories
-  ui --> apiUse
+  ui --> apiListings
+  ui --> apiEconomy
 
   apiAgents --> registryLib
-  apiMemories --> x402Lib
-  apiUse --> x402Lib
+  apiAgents --> creditScore
+  apiAgents --> validator
+  apiListings --> dataMarket
+  apiEconomy --> economyLib
+  apiMCP --> registryLib
+  apiMCP --> creditScore
+  apiMCP --> dataMarket
+  apiMCP --> economyLib
 
-  registryLib --> networksLib
-  registryLib --> idRegistry
-  registryLib --> repRegistry
+  registryLib --> goldsky
+  registryLib --> idReg
+  registryLib --> repReg
+  dataMarket --> dataReg
+  dataMarket --> escrow
+  economyLib --> econReg
 
-  x402Lib --> facilitator
-  x402Lib --> evmChains
-
-  serverWallet --> idRegistry
-  filecoinStorage --> filecoinNet
-
-  apiMemories --> filecoinNet
-  filecoinNet --> ipfs
-```
-
-### Simplified conceptual diagram
-
-High-level flow without implementation details (contracts and storage only):
-
-```mermaid
-flowchart LR
-  user[Users]
-  agentClients[AI_Agents]
-
-  subgraph marketplace [Episodes_Marketplace]
-    siteUI[Web_UI]
-    siteAPI[HTTP_APIs]
-  end
-
-  subgraph filcraftBlock [FilCraft_Skill_&_CLI]
-    filcraftTool[FilCraft_Tool]
-  end
-
-  subgraph onchain [On-chain_&_Storage]
-    erc8004[ERC-8004_Agent_Registry]
-    reputation[Reputation_Registry]
-    filecoin[Filecoin_Storage]
-    ipfs[IPFS_Gateways]
-    x402[x402_Facilitator]
-  end
-
-  user --> agentClients
-  agentClients --> filcraftTool
-
-  agentClients --> siteUI
-  siteUI --> siteAPI
-
-  siteAPI --> erc8004
-  siteAPI --> reputation
-  siteAPI --> filecoin
-  siteAPI --> x402
-
-  filcraftTool --> siteAPI
-  filcraftTool --> filecoin
-
+  idReg --> filecoin
+  repReg --> filecoin
+  dataReg --> filecoin
   filecoin --> ipfs
 ```
