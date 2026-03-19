@@ -14,6 +14,7 @@ import { Slider } from "@/components/ui/slider";
 import type { RegistryAgent } from "@/lib/registry";
 import type { GetAgentsPageResult } from "@/lib/agents";
 import { NETWORKS, NETWORK_IDS, type NetworkId } from "@/lib/networks";
+import type { HealthStatus } from "@/components/agent-card";
 import { computeCreditScore, type CreditTier } from "@/lib/credit-score";
 import { parseAgentCardServices } from "@/lib/agent-validator";
 import { cn } from "@/lib/utils";
@@ -83,6 +84,7 @@ export function MarketplaceClient({ initialData, initialNetwork }: MarketplaceCl
   const [panelAgentId, setPanelAgentId] = useState<string | null>(null);
   const [panelNetworkId, setPanelNetworkId] = useState<NetworkId>(initialNetwork);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [healthMap, setHealthMap] = useState<Record<string, HealthStatus>>({});
 
   const fetchAgents = useCallback(async (page: number, net: NetworkId) => {
     setIsLoading(true);
@@ -149,6 +151,26 @@ export function MarketplaceClient({ initialData, initialNetwork }: MarketplaceCl
     }
     return result;
   }, [agents, tierFilter, maxCostUsdc, sortBy]);
+
+  // Batch health fetch — one request instead of N per-agent requests
+  const displayedAgentIds = useMemo(
+    () => displayedAgents.map((a) => a.agentId).filter(Boolean).join(","),
+    [displayedAgents]
+  );
+  useEffect(() => {
+    if (!displayedAgentIds) {
+      setHealthMap({});
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/agents/health-batch?ids=${displayedAgentIds}&network=${network}`)
+      .then((r) => r.json())
+      .then((map: Record<string, HealthStatus>) => {
+        if (!cancelled) setHealthMap(map);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [displayedAgentIds, network]);
 
   const sidebar = (
     <div className="space-y-4">
@@ -293,6 +315,7 @@ export function MarketplaceClient({ initialData, initialNetwork }: MarketplaceCl
                     <RegistryAgentCard
                       agent={agent}
                       compact
+                      healthMap={healthMap}
                       onAgentClick={() => {
                         setPanelAgentId(agent.agentId);
                         setPanelNetworkId(agent.networkId ?? network);

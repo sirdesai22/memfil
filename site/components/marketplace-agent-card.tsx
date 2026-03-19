@@ -7,7 +7,7 @@ import { getNetwork, getExplorerAddressUrl } from "@/lib/networks";
 import { computeCreditScore } from "@/lib/credit-score";
 import { parseAgentCardServices } from "@/lib/agent-validator";
 import { resolveAgentImage } from "@/lib/agent-logos";
-import { HealthDot } from "@/components/agent-card";
+import { HealthDot, type HealthStatus } from "@/components/agent-card";
 import { cn } from "@/lib/utils";
 
 const TIER_BADGE: Record<string, string> = {
@@ -50,6 +50,7 @@ function agentInitialsSvg(seed: string, name: string): string {
 
 interface MarketplaceAgentCardProps {
   agent: RegistryAgent;
+  healthMap?: Record<string, HealthStatus>;
 }
 
 // Replace bare Unix timestamps (10-digit, seconds since epoch) with readable dates
@@ -63,7 +64,7 @@ function formatDescription(text: string): string {
   );
 }
 
-export function MarketplaceAgentCard({ agent }: MarketplaceAgentCardProps) {
+export function MarketplaceAgentCard({ agent, healthMap }: MarketplaceAgentCardProps) {
   const name = agent.metadata?.name ?? `Agent #${agent.agentId}`;
   const rawDescription = agent.metadata?.description;
   const description = rawDescription ? formatDescription(rawDescription) : undefined;
@@ -100,7 +101,7 @@ export function MarketplaceAgentCard({ agent }: MarketplaceAgentCardProps) {
             ) : (
               <img src={agentInitialsSvg(agent.id, name)} alt={name} className="h-full w-full object-cover" draggable={false} />
             )}
-            <HealthDot agentId={agent.agentId} networkId={networkId} />
+            <HealthDot agentId={agent.agentId} networkId={networkId} status={healthMap?.[agent.agentId]} />
           </div>
           <div className="min-w-0 flex-1">
             <p className="font-semibold text-[#e8dcc8] leading-tight truncate group-hover:text-[#f5d96a] transition-colors">
