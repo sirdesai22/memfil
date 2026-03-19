@@ -136,10 +136,25 @@ function agentAvatarSvg(seed: string, name: string): string {
 
 // ── Live health dot ────────────────────────────────────────────────────────────
 
-export function HealthDot({ agentId, networkId }: { agentId: string; networkId: string }) {
-  const [status, setStatus] = useState<"ok" | "unreachable" | "unknown">("unknown");
+export type HealthStatus = "ok" | "unreachable" | "unknown";
+
+export function HealthDot({
+  agentId,
+  networkId,
+  status: statusOverride,
+}: {
+  agentId: string;
+  networkId: string;
+  /** When provided, skips individual fetch — use with batch health */
+  status?: HealthStatus;
+}) {
+  const [status, setStatus] = useState<HealthStatus>(statusOverride ?? "unknown");
 
   useEffect(() => {
+    if (statusOverride !== undefined) {
+      setStatus(statusOverride);
+      return;
+    }
     let cancelled = false;
     fetch(`/api/agents/${agentId}/health?network=${networkId}`)
       .then((r) => r.json())
@@ -150,16 +165,17 @@ export function HealthDot({ agentId, networkId }: { agentId: string; networkId: 
         if (!cancelled) setStatus("unreachable");
       });
     return () => { cancelled = true; };
-  }, [agentId, networkId]);
+  }, [agentId, networkId, statusOverride]);
 
-  if (status === "unknown") return null;
+  const displayStatus = statusOverride ?? status;
+  if (displayStatus === "unknown") return null;
 
   return (
     <span
-      title={status === "ok" ? "Agent is live" : "Agent unreachable"}
+      title={displayStatus === "ok" ? "Agent is live" : "Agent unreachable"}
       className={cn(
         "absolute top-1.5 right-1.5 h-2 w-2 rounded-full border border-background",
-        status === "ok" ? "bg-emerald-500" : "bg-zinc-400"
+        displayStatus === "ok" ? "bg-emerald-500" : "bg-zinc-400"
       )}
     />
   );
@@ -171,9 +187,11 @@ interface RegistryAgentCardProps {
   agent: RegistryAgent;
   compact?: boolean;
   onAgentClick?: () => void;
+  /** Batch-fetched health map — avoids N individual health requests */
+  healthMap?: Record<string, HealthStatus>;
 }
 
-export function RegistryAgentCard({ agent, compact, onAgentClick }: RegistryAgentCardProps) {
+export function RegistryAgentCard({ agent, compact, onAgentClick, healthMap }: RegistryAgentCardProps) {
   const name = agent.metadata?.name ?? `Agent #${agent.agentId}`;
   const description = agent.metadata?.description;
   const metadataImage = agent.metadata?.image;
@@ -248,7 +266,7 @@ export function RegistryAgentCard({ agent, compact, onAgentClick }: RegistryAgen
               />
             )}
             <div className="absolute inset-0.5 rounded-sm border border-amber-600/20 dark:border-amber-500/10" />
-            <HealthDot agentId={agent.agentId} networkId={networkId} />
+            <HealthDot agentId={agent.agentId} networkId={networkId} status={healthMap?.[agent.agentId]} />
           </div>
           <div
             className={cn(

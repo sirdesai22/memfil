@@ -9,7 +9,7 @@ const SPLASH_KEY = "filcraft_splash_v1";
 // so Three.js finds them already cached when the world initializes.
 const MODEL_URLS = [
   "/models/RobotExpressive.glb",
-  "/models/CastleModel.glb",
+  "/models/Castle.glb",
   "/models/filecoin_model.glb",
   "/models/furnace.glb",
 ];

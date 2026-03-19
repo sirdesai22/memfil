@@ -7,8 +7,14 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { Info } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { IDENTITY_REGISTRY_ABI } from "@/lib/identity-registry-abi";
 import { NETWORKS, type NetworkId } from "@/lib/networks";
 import type {
@@ -61,11 +67,11 @@ const AGENT_CONFIG: Record<
   },
 };
 
-// Campfire positions and network labels — agents spawn at their chain's fire
+// Campfire positions and network labels — agents spawn at their chain's fire (scaled for smaller boxed world)
 const CAMPFIRE_CONFIG = [
   { x: 0, z: 0, label: "Filecoin Calibration", chainId: "314159", networkId: "filecoinCalibration" },
-  { x: -10, z: 7.5, label: "Ethereum Sepolia", chainId: "11155111", networkId: "sepolia" },
-  { x: 9, z: -4, label: "Base Sepolia", chainId: "84532", networkId: "baseSepolia" },
+  { x: -6, z: 5, label: "Ethereum Sepolia", chainId: "11155111", networkId: "sepolia" },
+  { x: 6, z: -3, label: "Base Sepolia", chainId: "84532", networkId: "baseSepolia" },
 ];
 const NETWORK_TO_FIRE = Object.fromEntries(CAMPFIRE_CONFIG.map((c) => [c.networkId, [c.x, c.z] as [number, number]]));
 
@@ -126,9 +132,9 @@ export function AetheriaWorld({
   const [regValidating, setRegValidating] = useState(false);
   const [regValidation, setRegValidation] = useState<{ valid: boolean; agentCard: any; health: boolean; errors: string[] } | null>(null);
   const [regTxHash, setRegTxHash] = useState<`0x${string}` | undefined>();
+  const [showControlsModal, setShowControlsModal] = useState(false);
   const { writeContract: regWriteContract, isPending: regIsWriting, error: regWriteError } = useWriteContract();
   const { isLoading: regIsConfirming, isSuccess: regIsConfirmed } = useWaitForTransactionReceipt({ hash: regTxHash });
-  const router = useRouter();
 
   const regNetworkConfig = NETWORKS[regNetwork];
 
@@ -268,17 +274,38 @@ export function AetheriaWorld({
       });
     };
 
-    type GLTFLoaderCtor = new () => { load: (url: string, onLoad: (gltf: unknown) => void, onProgress?: unknown, onError?: (err: unknown) => void) => void };
+    const loadDRACOLoader = (): Promise<unknown> => {
+      return new Promise((resolve) => {
+        if (typeof window !== "undefined" && (window as unknown as { THREE?: { DRACOLoader?: unknown } }).THREE?.DRACOLoader) {
+          resolve(undefined);
+          return;
+        }
+        const script = document.createElement("script");
+        script.src = "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js";
+        script.async = true;
+        script.onload = () => resolve(undefined);
+        document.head.appendChild(script);
+      });
+    };
+
+    type GLTFLoaderCtor = new () => { load: (url: string, onLoad: (gltf: unknown) => void, onProgress?: unknown, onError?: (err: unknown) => void) => void; setDRACOLoader?: (loader: unknown) => void };
+    type DRACOLoaderCtor = new () => { setDecoderPath: (path: string) => unknown };
 
     const loadModel = (path: string, name: string): Promise<unknown> => {
       return new Promise((resolve, reject) => {
-        // Read GLTFLoader from window.THREE at call time — it was attached by the loader script.
-        const GLTFLoader = (window as unknown as { THREE: { GLTFLoader: GLTFLoaderCtor } }).THREE?.GLTFLoader;
+        const THREE = (window as unknown as { THREE: { GLTFLoader: GLTFLoaderCtor; DRACOLoader?: DRACOLoaderCtor } }).THREE;
+        const GLTFLoader = THREE?.GLTFLoader;
         if (!GLTFLoader) {
           reject(new Error(`GLTFLoader not available on window.THREE when loading ${name}`));
           return;
         }
         const loader = new GLTFLoader();
+        // Draco-compressed GLB models require DRACOLoader to decode
+        if (loader.setDRACOLoader && THREE.DRACOLoader) {
+          const dracoLoader = new THREE.DRACOLoader();
+          dracoLoader.setDecoderPath("https://www.gstatic.com/draco/v1/decoders/");
+          loader.setDRACOLoader(dracoLoader);
+        }
         loader.load(
           path,
           (gltf) => resolve(gltf),
@@ -301,16 +328,20 @@ export function AetheriaWorld({
       })
       .then(({ THREE }) => {
         if (cancelled) return Promise.reject(new Error("cancelled"));
+        return loadDRACOLoader().then(() => ({ THREE }));
+      })
+      .then(({ THREE }) => {
+        if (cancelled) return Promise.reject(new Error("cancelled"));
         return Promise.all([
           loadModel("/models/RobotExpressive.glb", "RobotExpressive"),
-          loadModel("/models/CastleModel.glb", "CastleModel"),
+          loadModel("/models/Castle.glb", "CastleModel"),
           loadModel("/models/filecoin_model.glb", "filecoin_model"),
           loadModel("/models/furnace.glb", "furnace"),
         ]).then(([gltf, castleGltf, filecoinGltf, furnaceGltf]) => ({ THREE, gltf, castleGltf, filecoinGltf, furnaceGltf }));
       })
       .then(({ THREE, gltf, castleGltf, filecoinGltf, furnaceGltf }) => {
         if (cancelled) return;
-        initWorld(THREE, containerRef.current!, dataRef, setSelectedAgentId, gltf as { scene: any; animations: any[] }, castleGltf as { scene: any }, filecoinGltf as { scene: any }, furnaceGltf as { scene: any }, () => router.push("/marketplace"), () => setShowRegister(true));
+        initWorld(THREE, containerRef.current!, dataRef, setSelectedAgentId, gltf as { scene: any; animations: any[] }, castleGltf as { scene: any }, filecoinGltf as { scene: any }, furnaceGltf as { scene: any }, () => {}, () => setShowRegister(true));
         setLoading(false);
         rafId = requestAnimationFrame(function loop() {
           if (cancelled) return;
@@ -398,20 +429,27 @@ export function AetheriaWorld({
         {/* Scoreboard panel */}
         <div
           id="scoreboard-panel"
-          className="absolute top-3 right-3 w-[300px] pointer-events-auto flex flex-col"
+          className="absolute top-3 right-3 pointer-events-auto flex flex-col transition-all duration-200"
           style={{
+            width: scoreboardExpanded ? 300 : 180,
             background: "linear-gradient(160deg, rgba(6,4,1,0.98) 0%, rgba(16,10,2,0.97) 100%)",
             border: "1px solid rgba(180,140,40,0.25)",
             borderRadius: 3,
             boxShadow: "0 0 0 1px rgba(180,140,40,0.06), 0 12px 50px rgba(0,0,0,0.9), inset 0 1px 0 rgba(245,217,106,0.08)",
-            maxHeight: "calc(100vh - 80px)",
+            maxHeight: scoreboardExpanded ? "calc(100vh - 80px)" : "none",
             fontSize: 17,
           }}
         >
-          {/* Header */}
-          <div style={{ position: "relative", padding: "12px 16px 10px", borderBottom: "1px solid rgba(90,74,42,0.3)", background: "linear-gradient(90deg, transparent, rgba(180,140,40,0.07), transparent)" }}>
-            {/* Corner ornaments */}
-            {[["top","left"],["top","right"],["bottom","left"],["bottom","right"]].map(([v,h]) => (
+          {/* Header — clickable to collapse/expand */}
+          <button
+            type="button"
+            onClick={() => setScoreboardExpanded((v) => !v)}
+            className="w-full text-left cursor-pointer hover:bg-[rgba(245,217,106,0.04)] transition-colors flex items-center justify-between gap-2"
+            style={{ position: "relative", padding: scoreboardExpanded ? "12px 16px 10px" : "10px 14px", borderBottom: scoreboardExpanded ? "1px solid rgba(90,74,42,0.3)" : "none", background: "linear-gradient(90deg, transparent, rgba(180,140,40,0.07), transparent)" }}
+            title={scoreboardExpanded ? "Collapse scoreboard" : "Expand scoreboard"}
+          >
+            {/* Corner ornaments — only when expanded */}
+            {scoreboardExpanded && [["top","left"],["top","right"],["bottom","left"],["bottom","right"]].map(([v,h]) => (
               <div key={v+h} style={{ position: "absolute", [v]: 5, [h]: 8, width: 7, height: 7,
                 borderTop: v === "top" ? "1px solid rgba(245,217,106,0.5)" : undefined,
                 borderBottom: v === "bottom" ? "1px solid rgba(245,217,106,0.5)" : undefined,
@@ -419,15 +457,23 @@ export function AetheriaWorld({
                 borderRight: h === "right" ? "1px solid rgba(245,217,106,0.5)" : undefined,
               }} />
             ))}
-            <div style={{ fontFamily: "Cinzel, serif", fontSize: 14, fontWeight: 700, letterSpacing: "0.22em", textAlign: "center", color: "#f5d96a", textShadow: "0 0 18px rgba(245,217,106,0.5)" }}>
-              ⚔ AGENT ECONOMY ⚔
+            <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
+              <div style={{ fontFamily: "Cinzel, serif", fontSize: scoreboardExpanded ? 14 : 11, fontWeight: 700, letterSpacing: scoreboardExpanded ? "0.22em" : "0.1em", textAlign: scoreboardExpanded ? "center" : "left", color: "#f5d96a", textShadow: "0 0 18px rgba(245,217,106,0.5)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {scoreboardExpanded ? "⚔ AGENT ECONOMY ⚔" : "⚔ SCOREBOARD"}
+              </div>
+              {scoreboardExpanded && (
+                <div style={{ fontFamily: "Cinzel, serif", fontSize: 10, letterSpacing: "0.35em", textAlign: "center", color: "rgba(245,217,106,0.85)", marginTop: 2 }}>
+                  SCOREBOARD
+                </div>
+              )}
             </div>
-            <div style={{ fontFamily: "Cinzel, serif", fontSize: 10, letterSpacing: "0.35em", textAlign: "center", color: "rgba(245,217,106,0.85)", marginTop: 2 }}>
-              SCOREBOARD
-            </div>
-          </div>
+            <span style={{ flexShrink: 0, color: "#a89060", fontSize: 12, transition: "transform 0.2s", transform: scoreboardExpanded ? "rotate(180deg)" : "rotate(0deg)" }} aria-hidden>
+              ▼
+            </span>
+          </button>
 
           {/* Agent rows */}
+          {scoreboardExpanded && (
           <div style={{ padding: "4px 0", overflowY: "auto", flex: 1, minHeight: 0, scrollbarWidth: "none" }}
             className="[&::-webkit-scrollbar]:hidden"
           >
@@ -486,8 +532,10 @@ export function AetheriaWorld({
                 );
               })}
           </div>
+          )}
 
           {/* Footer */}
+          {scoreboardExpanded && (
           <div style={{ borderTop: "1px solid rgba(90,74,42,0.3)", padding: "10px 14px", background: "linear-gradient(90deg, transparent, rgba(180,140,40,0.04), transparent)" }}>
             {/* Totals */}
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
@@ -526,6 +574,7 @@ export function AetheriaWorld({
               </div>
             )}
           </div>
+          )}
         </div>
 
         {/* Activity log */}
@@ -1378,12 +1427,52 @@ export function AetheriaWorld({
           </>
         )}
 
-        <div
-          className="absolute bottom-1 left-1/2 -translate-x-1/2 text-[9px] text-[#504030] text-center"
-          style={{ letterSpacing: "1px" }}
+        <button
+          type="button"
+          onClick={() => setShowControlsModal(true)}
+          className="absolute bottom-3 left-3 p-3 rounded-full text-[#a89060] hover:text-[#f5d96a] hover:bg-[rgba(245,217,106,0.12)] transition-colors focus:outline-none focus:ring-2 focus:ring-[#f5d96a]/40 z-10 pointer-events-auto"
+          aria-label="World controls"
         >
-          Left-click: select · Right-drag: rotate · Scroll: zoom · WASD: pan · Dbl-click: follow
-        </div>
+          <Info className="size-9" strokeWidth={1.5} />
+        </button>
+
+        <Dialog open={showControlsModal} onOpenChange={setShowControlsModal}>
+          <DialogContent className="sm:max-w-lg bg-[#1a1612] border-[#5a4a2a]/50">
+            <DialogHeader>
+              <DialogTitle className="text-[#f5d96a] tracking-widest" style={{ fontFamily: "Cinzel, serif" }}>
+                World Controls
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 text-[#e8dcc8]">
+              <div className="grid gap-3 text-base leading-relaxed">
+                <div className="flex items-center gap-3">
+                  <kbd className="px-2.5 py-1 rounded bg-[#2a2520] border border-[#5a4a2a] text-[#f5d96a] font-mono text-sm">Left-click</kbd>
+                  <span>Select agent or object</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <kbd className="px-2.5 py-1 rounded bg-[#2a2520] border border-[#5a4a2a] text-[#f5d96a] font-mono text-sm">Right-drag</kbd>
+                  <span>Rotate camera</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <kbd className="px-2.5 py-1 rounded bg-[#2a2520] border border-[#5a4a2a] text-[#f5d96a] font-mono text-sm">Scroll</kbd>
+                  <span>Zoom in / out</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <kbd className="px-2.5 py-1 rounded bg-[#2a2520] border border-[#5a4a2a] text-[#f5d96a] font-mono text-sm">WASD</kbd>
+                  <span>Pan camera</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <kbd className="px-2.5 py-1 rounded bg-[#2a2520] border border-[#5a4a2a] text-[#f5d96a] font-mono text-sm">Q / E</kbd>
+                  <span>Rotate camera (alternative)</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <kbd className="px-2.5 py-1 rounded bg-[#2a2520] border border-[#5a4a2a] text-[#f5d96a] font-mono text-sm">Double-click</kbd>
+                  <span>Follow selected agent</span>
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Vignette */}
@@ -1425,11 +1514,20 @@ function initWorld(
   onFurnaceClick: () => void
 ) {
   const initialData = dataRef.current;
-  const WORLD_SIZE = 120;
-  const H = (x: number, z: number) =>
-    Math.sin(x * 0.05) * Math.cos(z * 0.07) * 2 +
-    Math.sin(x * 0.12 + z * 0.08) * 1.5 +
-    Math.cos(z * 0.03) * 3;
+  const WORLD_SIZE = 48;
+  const CASTLE_FLAT_CENTER = { x: 0, z: 12 };
+  const CASTLE_FLAT_RADIUS = 10;
+  const H = (x: number, z: number) => {
+    const dx = x - CASTLE_FLAT_CENTER.x;
+    const dz = z - CASTLE_FLAT_CENTER.z;
+    if (dx * dx + dz * dz < CASTLE_FLAT_RADIUS * CASTLE_FLAT_RADIUS) return 0;
+    return (
+      (Math.sin(x * 0.05) * Math.cos(z * 0.07) * 2 +
+        Math.sin(x * 0.12 + z * 0.08) * 1.5 +
+        Math.cos(z * 0.03) * 3) *
+      0.15
+    );
+  };
 
   const canvas = document.createElement("canvas");
   canvas.id = "game-canvas";
@@ -1447,20 +1545,23 @@ function initWorld(
   renderer.toneMappingExposure = 0.85;
 
   const scene = new THREE.Scene();
-  scene.fog = new THREE.FogExp2(0x1a1520, 0.012);
+  scene.fog = new THREE.FogExp2(0x1a1520, 0.008);
   scene.background = new THREE.Color(0x0d0a15);
-  const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 800);
+  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 400);
 
-  // Orbit camera
+  // Orbit camera — isometric-style top-down view (phi ~60° from vertical, theta 45°)
+  const ISO_PHI = Math.PI / 3;
+  const ISO_THETA = Math.PI / 4;
+  const PAN_BOUND = WORLD_SIZE / 2 - 4;
   const orbit = {
     target: new THREE.Vector3(0, 0, 0),
     smooth: new THREE.Vector3(0, 0, 0),
-    dist: 38,
-    tDist: 38,
-    phi: Math.PI * 0.3,
-    tPhi: Math.PI * 0.3,
-    theta: Math.PI * 0.25,
-    tTheta: Math.PI * 0.25,
+    dist: 32,
+    tDist: 32,
+    phi: ISO_PHI,
+    tPhi: ISO_PHI,
+    theta: ISO_THETA,
+    tTheta: ISO_THETA,
     draggingRot: false,
     draggingPan: false,
     last: { x: 0, y: 0 },
@@ -1471,6 +1572,8 @@ function initWorld(
     orbit.phi += (orbit.tPhi - orbit.phi) * 0.12;
     orbit.theta += (orbit.tTheta - orbit.theta) * 0.12;
     orbit.smooth.lerp(orbit.target, 0.08);
+    orbit.target.x = Math.max(-PAN_BOUND, Math.min(PAN_BOUND, orbit.target.x));
+    orbit.target.z = Math.max(-PAN_BOUND, Math.min(PAN_BOUND, orbit.target.z));
     const r = orbit.dist;
     camera.position.set(
       orbit.smooth.x + r * Math.sin(orbit.phi) * Math.sin(orbit.theta),
@@ -1500,7 +1603,7 @@ function initWorld(
     const dy = e.clientY - orbit.last.y;
     if (orbit.draggingRot) {
       orbit.tTheta -= dx * 0.005;
-      orbit.tPhi = Math.max(0.1, Math.min(Math.PI * 0.48, orbit.tPhi - dy * 0.005));
+      orbit.tPhi = Math.max(ISO_PHI - 0.2, Math.min(ISO_PHI + 0.2, orbit.tPhi - dy * 0.005));
       orbit.last = { x: e.clientX, y: e.clientY };
     }
     if (orbit.draggingPan) {
@@ -1521,7 +1624,7 @@ function initWorld(
     "wheel",
     (e) => {
       e.preventDefault();
-      orbit.tDist = Math.max(6, Math.min(50, orbit.tDist * (1 + e.deltaY * 0.001)));
+      orbit.tDist = Math.max(18, Math.min(42, orbit.tDist * (1 + e.deltaY * 0.001)));
     },
     { passive: false }
   );
@@ -1602,12 +1705,59 @@ function initWorld(
   terrain.receiveShadow = true;
   scene.add(terrain);
 
+  // Ancient walls — stone perimeter boxing the world for isometric view
+  const WALL_H = 3.5;
+  const WALL_T = 1.2;
+  const HALF = WORLD_SIZE / 2;
+  const wallMat = new THREE.MeshStandardMaterial({
+    color: 0x3a2a1a,
+    roughness: 0.9,
+    metalness: 0.05,
+    flatShading: true,
+  });
+  const wallMatAlt = new THREE.MeshStandardMaterial({
+    color: 0x2a2018,
+    roughness: 0.9,
+    metalness: 0.05,
+    flatShading: true,
+  });
+  const wallSegLen = 4;
+  const numSegs = Math.ceil((WORLD_SIZE + WALL_T) / wallSegLen);
+  [-HALF - WALL_T / 2, HALF + WALL_T / 2].forEach((edge, i) => {
+    for (let s = 0; s < numSegs; s++) {
+      const t = (s - (numSegs - 1) / 2) * wallSegLen;
+      const base = new THREE.Mesh(new THREE.BoxGeometry(WALL_T, WALL_H, wallSegLen + 0.2), wallMat);
+      base.position.set(edge, WALL_H / 2, t);
+      base.castShadow = true;
+      base.receiveShadow = true;
+      scene.add(base);
+      const merlon = new THREE.Mesh(new THREE.BoxGeometry(WALL_T * 1.1, WALL_H * 0.4, wallSegLen * 0.4), wallMatAlt);
+      merlon.position.set(edge, WALL_H + WALL_H * 0.2, t);
+      merlon.castShadow = true;
+      scene.add(merlon);
+    }
+  });
+  [-HALF - WALL_T / 2, HALF + WALL_T / 2].forEach((edge, i) => {
+    for (let s = 0; s < numSegs; s++) {
+      const t = (s - (numSegs - 1) / 2) * wallSegLen;
+      const base = new THREE.Mesh(new THREE.BoxGeometry(wallSegLen + 0.2, WALL_H, WALL_T), wallMat);
+      base.position.set(t, WALL_H / 2, edge);
+      base.castShadow = true;
+      base.receiveShadow = true;
+      scene.add(base);
+      const merlon = new THREE.Mesh(new THREE.BoxGeometry(wallSegLen * 0.4, WALL_H * 0.4, WALL_T * 1.1), wallMatAlt);
+      merlon.position.set(t, WALL_H + WALL_H * 0.2, edge);
+      merlon.castShadow = true;
+      scene.add(merlon);
+    }
+  });
+
   // Rocks — 12 blue-grey crystalline boulders (sci-fi)
   for (let i = 0; i < 12; i++) {
     const x = (Math.random() - 0.5) * WORLD_SIZE * 0.82;
     const z = (Math.random() - 0.5) * WORLD_SIZE * 0.82;
-    if (Math.abs(x) < 8 && Math.abs(z) < 8) continue;
-    if (Math.abs(x) < 6 && Math.abs(z - 17.5) < 6) continue;
+    if (Math.abs(x) < 6 && Math.abs(z) < 6) continue;
+    if (Math.abs(x) < 5 && Math.abs(z - 12) < 5) continue;
     const rock = new THREE.Mesh(
       new THREE.IcosahedronGeometry(0.6 + Math.random() * 0.7, 0),
       new THREE.MeshStandardMaterial({
@@ -1624,57 +1774,6 @@ function initWorld(
     scene.add(rock);
   }
 
-
-  // Perimeter treeline — dense ring of dark conifers around the terrain edge
-  {
-    const INNER_R = WORLD_SIZE * 0.38; // start of tree band (inner edge)
-    const OUTER_R = WORLD_SIZE * 0.50; // hard outer edge of terrain
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x1a120a, roughness: 1 });
-    const foliagePalette = [
-      [0x0d2a15, 0x0a2010, 0x122a12], // dark pine greens
-      [0x0a1f2a, 0x0d2535, 0x0a1a22], // dark teal-blue
-      [0x1a2a10, 0x162208, 0x1f2a14], // mossy
-    ];
-    const TREE_COUNT = 120;
-    for (let i = 0; i < TREE_COUNT; i++) {
-      // Polar coords — uniform distribution in the annular ring
-      const angle = (i / TREE_COUNT) * Math.PI * 2 + (Math.random() - 0.5) * (Math.PI * 2 / TREE_COUNT) * 2;
-      const r = INNER_R + Math.random() * (OUTER_R - INNER_R);
-      const x = Math.cos(angle) * r;
-      const z = Math.sin(angle) * r;
-
-      const palette = foliagePalette[i % foliagePalette.length];
-      const h = 3.5 + Math.random() * 5.5; // taller trees at perimeter
-      const treeG = new THREE.Group();
-
-      // Trunk
-      const tr = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.26, h, 7), trunkMat);
-      tr.position.y = h / 2;
-      tr.castShadow = true;
-      treeG.add(tr);
-
-      // Stacked cones — 3 tiers for conifer silhouette
-      const tiers = 3 + Math.floor(Math.random() * 2);
-      for (let t = 0; t < tiers; t++) {
-        const coneR = (1.6 - t * 0.25) * (0.85 + Math.random() * 0.3);
-        const coneH = 2.0 + Math.random() * 0.8;
-        const cone = new THREE.Mesh(
-          new THREE.ConeGeometry(coneR, coneH, 8),
-          new THREE.MeshStandardMaterial({ color: palette[t % palette.length], roughness: 0.95 })
-        );
-        cone.position.y = h * 0.55 + t * (h * 0.18);
-        cone.castShadow = true;
-        treeG.add(cone);
-      }
-
-      treeG.position.set(x, H(x, z), z);
-      treeG.rotation.y = Math.random() * Math.PI * 2;
-      // Slight random lean
-      treeG.rotation.x = (Math.random() - 0.5) * 0.06;
-      treeG.rotation.z = (Math.random() - 0.5) * 0.06;
-      scene.add(treeG);
-    }
-  }
 
   // Water — pond
   const waterGeo = new THREE.PlaneGeometry(14, 11, 24, 24);
@@ -1795,7 +1894,7 @@ function initWorld(
 
   // ── Storage Depot (Filecoin Onchain Cloud) at (0, 17.5) — tech data-server look ──
   const FIL_BLUE = 0x0090ff;
-  const STORAGE_POS = { x: 0, z: 17.5 };
+  const STORAGE_POS = { x: 0, z: 12 };
   const storageGroup = new THREE.Group();
   const ty = H(STORAGE_POS.x, STORAGE_POS.z);
 
@@ -1811,8 +1910,29 @@ function initWorld(
   // Recompute box after scaling to sit flush on the ground
   const castleBox2 = new THREE.Box3().setFromObject(castleScene);
   castleScene.position.y = -castleBox2.min.y;
-  castleScene.traverse((obj: { isMesh?: boolean; castShadow?: boolean; receiveShadow?: boolean }) => {
-    if (obj.isMesh) { obj.castShadow = true; obj.receiveShadow = true; }
+  // Darker stone palette matching world: base 0x4a3a2a, accent 0x3a2a1a
+  const CASTLE_COLORS = [0x4a3a2a, 0x3a2a1a, 0x352818];
+  let meshIdx = 0;
+  castleScene.traverse((obj: any) => {
+    if (obj.isMesh) {
+      obj.castShadow = true;
+      obj.receiveShadow = true;
+      const mats: any[] = Array.isArray(obj.material) ? obj.material : [obj.material];
+      mats.forEach((mat: any) => {
+        if (!mat) return;
+        const m = mat.clone();
+        m.color.setHex(CASTLE_COLORS[meshIdx % CASTLE_COLORS.length]);
+        m.roughness = 0.85;
+        m.metalness = 0.1;
+        if (Array.isArray(obj.material)) {
+          const idx = obj.material.indexOf(mat);
+          obj.material[idx] = m;
+        } else {
+          obj.material = m;
+        }
+      });
+      meshIdx++;
+    }
   });
   storageGroup.add(castleScene);
 
@@ -1930,13 +2050,13 @@ function initWorld(
 
   const signCanvas = document.createElement("canvas");
   signCanvas.width = 512;
-  signCanvas.height = 128;
+  signCanvas.height = 200;
   const signTex = new THREE.CanvasTexture(signCanvas);
   const signSprite = new THREE.Sprite(
     new THREE.SpriteMaterial({ map: signTex, transparent: true, depthTest: false })
   );
-  signSprite.position.set(0, POST_H - 0.3, 2.7);
-  signSprite.scale.set(3.5, 0.9, 1);
+  signSprite.position.set(0, TARGET_CASTLE_HEIGHT - 0.6, 2.9);
+  signSprite.scale.set(3.5, 1.4, 1);
   storageGroup.add(signSprite);
   storageGroup.position.set(STORAGE_POS.x, ty, STORAGE_POS.z);
   storageGroup.rotation.y = Math.PI; // face inward toward world center
@@ -1987,12 +2107,12 @@ function initWorld(
   filGlowWide.position.set(STORAGE_POS.x, ty + filHoverBaseY - 1, STORAGE_POS.z);
   scene.add(filGlowWide);
 
-  // ── 3D World Status card spinning above the castle ──
-  const STATUS_CARD_W = 4.5;
-  const STATUS_CARD_H = 2.6;
+  // ── Filecoin Onchain Cloud card — blue glowing card at top ──
+  const STATUS_CARD_W = 5;
+  const STATUS_CARD_H = 2.4;
   const statusCardCanvas = document.createElement("canvas");
-  statusCardCanvas.width = 768;
-  statusCardCanvas.height = 438;
+  statusCardCanvas.width = 800;
+  statusCardCanvas.height = 384;
 
   function renderStatusCard() {
     const ctx = statusCardCanvas.getContext("2d")!;
@@ -2000,10 +2120,20 @@ function initWorld(
     const h = statusCardCanvas.height;
     const d = dataRef.current;
 
-    // Background
+    const glow = (color: string, blur: number) => {
+      ctx.shadowColor = color;
+      ctx.shadowBlur = blur;
+    };
+    const noGlow = () => {
+      ctx.shadowColor = "transparent";
+      ctx.shadowBlur = 0;
+    };
+
+    // Background — dark blue gradient
     const grad = ctx.createLinearGradient(0, 0, w, h);
-    grad.addColorStop(0, "rgba(6,4,1,0.96)");
-    grad.addColorStop(1, "rgba(16,10,2,0.95)");
+    grad.addColorStop(0, "rgba(2,8,24,0.97)");
+    grad.addColorStop(0.5, "rgba(4,16,48,0.95)");
+    grad.addColorStop(1, "rgba(2,12,28,0.96)");
     ctx.fillStyle = grad;
     ctx.beginPath();
     const r = 12;
@@ -2018,16 +2148,18 @@ function initWorld(
     ctx.quadraticCurveTo(0, 0, r, 0);
     ctx.fill();
 
-    // Border
-    ctx.strokeStyle = "rgba(180,140,40,0.55)";
-    ctx.lineWidth = 5;
+    // Outer glow border
+    ctx.strokeStyle = "rgba(0,144,255,0.7)";
+    ctx.lineWidth = 6;
+    glow("rgba(0,144,255,0.95)", 30);
     ctx.stroke();
+    noGlow();
 
     // Inner glow border
-    ctx.strokeStyle = "rgba(245,217,106,0.15)";
+    ctx.strokeStyle = "rgba(80,180,255,0.5)";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    const m = 6;
+    const m = 8;
     ctx.moveTo(r + m, m);
     ctx.lineTo(w - r - m, m);
     ctx.quadraticCurveTo(w - m, m, w - m, r + m);
@@ -2037,60 +2169,40 @@ function initWorld(
     ctx.quadraticCurveTo(m, h - m, m, h - r - m);
     ctx.lineTo(m, r + m);
     ctx.quadraticCurveTo(m, m, r + m, m);
+    glow("rgba(0,144,255,0.9)", 18);
     ctx.stroke();
+    noGlow();
 
-    // Header line
-    ctx.fillStyle = "rgba(90,74,42,0.5)";
-    ctx.fillRect(20, 93, w - 40, 1);
-
-    // Header text
-    ctx.font = "bold 39px Cinzel, serif";
-    ctx.fillStyle = "rgba(245,217,106,0.7)";
     ctx.textAlign = "center";
-    ctx.fillText("WORLD STATUS", w / 2, 66);
 
-    // Divider between columns
-    ctx.fillStyle = "rgba(90,74,42,0.5)";
-    ctx.fillRect(w / 2, 108, 1, 252);
+    // Title — Filecoin Onchain Cloud
+    ctx.font = "bold 42px MedievalSharp";
+    ctx.fillStyle = "#60b8ff";
+    glow("rgba(0,144,255,0.95)", 40);
+    ctx.fillText("Filecoin Onchain Cloud", w / 2, 68);
+    noGlow();
 
-    // Left column — AGENTS
-    ctx.font = "bold 32px Cinzel, serif";
-    ctx.fillStyle = "#a89060";
-    ctx.fillText("AGENTS", w / 4, 144);
+    // Storage & Revenue
+    ctx.font = "bold 30px MedievalSharp";
+    ctx.fillStyle = "#a0d8ff";
+    glow("rgba(0,144,255,0.9)", 28);
+    ctx.fillText(
+      `Storage: ${formatTFil(d.summary.totalStorageCostWei)} tFIL · Revenue: $${formatUsd(d.summary.totalRevenueUsdCents)}`,
+      w / 2,
+      120
+    );
+    noGlow();
 
-    ctx.font = "bold 102px MedievalSharp, cursive";
-    ctx.fillStyle = "#f5d96a";
-    ctx.shadowColor = "rgba(245,217,106,0.5)";
-    ctx.shadowBlur = 15;
-    ctx.fillText(String(d.agentRows.length), w / 4, 252);
-    ctx.shadowBlur = 0;
-
-    // Agent status dots
-    const dotY = 315;
-    ctx.font = "bold 33px sans-serif";
-    ctx.fillStyle = "#10b981";
-    ctx.fillText(`● ${d.summary.activeAgents}`, w / 4 - 87, dotY);
-    ctx.fillStyle = "#f59e0b";
-    ctx.fillText(`● ${d.summary.atRiskAgents}`, w / 4, dotY);
-    ctx.fillStyle = "#6b7280";
-    ctx.fillText(`● ${d.summary.windDownCount}`, w / 4 + 87, dotY);
-
-    // Right column — STORAGE
-    ctx.font = "bold 32px Cinzel, serif";
-    ctx.fillStyle = "#a89060";
-    ctx.textAlign = "center";
-    ctx.fillText("STORAGE", (w * 3) / 4, 144);
-
-    ctx.font = "bold 72px MedievalSharp, cursive";
-    ctx.fillStyle = "#e8a030";
-    ctx.shadowColor = "rgba(232,160,48,0.4)";
-    ctx.shadowBlur = 12;
-    ctx.fillText(formatTFil(d.summary.totalStorageCostWei), (w * 3) / 4, 237);
-    ctx.shadowBlur = 0;
-
-    ctx.font = "bold 30px Cinzel, serif";
-    ctx.fillStyle = "#a89060";
-    ctx.fillText("tFIL", (w * 3) / 4, 294);
+    // Status row
+    ctx.font = "bold 24px MedievalSharp";
+    ctx.fillStyle = "#70a8d0";
+    glow("rgba(0,144,255,0.6)", 12);
+    ctx.fillText(
+      `Healthy: ${d.summary.activeAgents} · At-Risk: ${d.summary.atRiskAgents} · Wound: ${d.summary.windDownCount}`,
+      w / 2,
+      168
+    );
+    noGlow();
   }
 
   renderStatusCard();
@@ -2100,11 +2212,12 @@ function initWorld(
   const statusCardMat = new THREE.MeshStandardMaterial({
     map: statusCardTex,
     transparent: true,
-    roughness: 0.3,
-    metalness: 0.15,
+    roughness: 0.2,
+    metalness: 0.1,
     side: THREE.DoubleSide,
-    emissive: 0x332200,
-    emissiveIntensity: 0.3,
+    emissive: 0x0066cc,
+    emissiveIntensity: 0.6,
+    toneMapped: false,
   });
   const statusCardGeo = new THREE.PlaneGeometry(STATUS_CARD_W, STATUS_CARD_H);
   const statusCardMesh = new THREE.Mesh(statusCardGeo, statusCardMat);
@@ -2112,18 +2225,21 @@ function initWorld(
   const statusCardGroup = new THREE.Group();
   statusCardGroup.add(statusCardMesh);
 
-  // Position above filecoin model
-  const statusCardBaseY = TARGET_CASTLE_HEIGHT + 3;
+  // Position at top — above castle and filecoin model
+  const statusCardBaseY = TARGET_CASTLE_HEIGHT + 6;
   statusCardGroup.position.set(STORAGE_POS.x, ty + statusCardBaseY, STORAGE_POS.z);
   scene.add(statusCardGroup);
 
-  // Point light to illuminate the card
-  const cardLight = new THREE.PointLight(0xf5d96a, 1.5, 8);
-  cardLight.position.set(0, 0, 1.5);
-  statusCardGroup.add(cardLight);
+  // Strong blue glow lights around the card
+  const cardGlowCore = new THREE.PointLight(0x0088ff, 4, 12);
+  cardGlowCore.position.set(0, 0, 2);
+  statusCardGroup.add(cardGlowCore);
+  const cardGlowWide = new THREE.PointLight(0x0044cc, 2.5, 18);
+  cardGlowWide.position.set(0, 0, 4);
+  statusCardGroup.add(cardGlowWide);
 
   // ── 3D Economy Board — stock-market style digital display ──────────────────
-  const ECON_BOARD_POS = { x: -18, z: -12 };
+  const ECON_BOARD_POS = { x: -10, z: -10 };
   const ECON_BOARD_W = 15;
   const ECON_BOARD_H = 8.8;
   const econBoardCanvas = document.createElement("canvas");
@@ -2649,25 +2765,51 @@ function initWorld(
   function updateStorageSign() {
     const summary = dataRef.current.summary;
     const ctx = signCanvas.getContext("2d")!;
-    ctx.clearRect(0, 0, 512, 128);
-    ctx.font = "bold 36px MedievalSharp";
-    ctx.fillStyle = "#e8a030";
+    ctx.clearRect(0, 0, 512, 200);
+
+    const grad = ctx.createLinearGradient(0, 0, 512, 200);
+    grad.addColorStop(0, "rgba(4,12,24,0.94)");
+    grad.addColorStop(1, "rgba(8,20,40,0.92)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 512, 200);
+
     ctx.textAlign = "center";
-    ctx.fillText("Filecoin Onchain Cloud", 256, 40);
-    ctx.font = "24px MedievalSharp";
-    ctx.fillStyle = "#f5d96a";
+
+    const glow = (color: string, blur: number) => {
+      ctx.shadowColor = color;
+      ctx.shadowBlur = blur;
+    };
+    const noGlow = () => {
+      ctx.shadowColor = "transparent";
+      ctx.shadowBlur = 0;
+    };
+
+    ctx.font = "bold 38px MedievalSharp";
+    ctx.fillStyle = "#40aaff";
+    glow("rgba(0,144,255,0.9)", 24);
+    ctx.fillText("Filecoin Onchain Cloud", 256, 52);
+    noGlow();
+
+    ctx.font = "22px MedievalSharp";
+    ctx.fillStyle = "#80c8ff";
+    glow("rgba(0,144,255,0.7)", 16);
     ctx.fillText(
       `Storage: ${formatTFil(summary.totalStorageCostWei)} tFIL · Revenue: $${formatUsd(summary.totalRevenueUsdCents)}`,
       256,
-      80
+      105
     );
-    ctx.font = "16px MedievalSharp";
-    ctx.fillStyle = "#b0a080";
+    noGlow();
+
+    ctx.font = "15px MedievalSharp";
+    ctx.fillStyle = "#6090c0";
+    glow("rgba(0,144,255,0.5)", 10);
     ctx.fillText(
       `Healthy: ${summary.activeAgents} · At-Risk: ${summary.atRiskAgents} · Wound: ${summary.windDownCount}`,
       256,
-      108
+      148
     );
+    noGlow();
+
     signTex.needsUpdate = true;
 
     // Artifact tablets: count = sum of completedRuns across agents, min 6, max 30
@@ -2924,8 +3066,8 @@ function initWorld(
   });
   const explorerGroup = new THREE.Group();
   explorerGroup.add(explorerScene);
-  const explorerStartX = -12;
-  const explorerStartZ = 5;
+  const explorerStartX = -8;
+  const explorerStartZ = 2;
   explorerGroup.position.set(explorerStartX, H(explorerStartX, explorerStartZ), explorerStartZ);
   scene.add(explorerGroup);
 
@@ -2962,7 +3104,7 @@ function initWorld(
         isCastle: true,
       };
     }
-    const bound = WORLD_SIZE * 0.43;
+    const bound = WORLD_SIZE * 0.38;
     return {
       x: (Math.random() - 0.5) * 2 * bound,
       z: (Math.random() - 0.5) * 2 * bound,
@@ -2992,7 +3134,7 @@ function initWorld(
         c.wanderTimer -= dt;
         if (c.wanderState === "idle" && c.wanderTimer <= 0) {
           // Pick a fully random target anywhere on the map
-          const bound = WORLD_SIZE * 0.34;
+          const bound = WORLD_SIZE * 0.30;
           c.wanderTarget = {
             x: (Math.random() - 0.5) * 2 * bound,
             z: (Math.random() - 0.5) * 2 * bound,
@@ -3072,19 +3214,21 @@ function initWorld(
       selRing.rotation.y = now * 0.001;
     } else selRing.visible = false;
     campfires.forEach((cf) => {
-      const ud = cf.userData as { fireLight?: { intensity: number }; fireParticles?: { geometry: { attributes: { position: { count: number; array: Float32Array; needsUpdate?: boolean } } }; material: { opacity?: number } } };
+      const ud = cf.userData as { fireLight?: { intensity: number }; fireParticles?: { geometry: { attributes: { position: { count: number; array: Float32Array | null; needsUpdate?: boolean } } }; material: { opacity?: number } } };
       if (ud.fireLight) ud.fireLight.intensity = 1.5 + Math.sin(now * 0.01) * 0.5 + Math.random() * 0.3;
       if (ud.fireParticles) {
         const fp = ud.fireParticles.geometry.attributes.position;
-        for (let i = 0; i < fp.count; i++) {
-          fp.array[i * 3 + 1] += 0.02;
-          if (fp.array[i * 3 + 1] > 2) {
-            fp.array[i * 3] = (Math.random() - 0.5) * 0.6;
-            fp.array[i * 3 + 1] = 0.3;
-            fp.array[i * 3 + 2] = (Math.random() - 0.5) * 0.6;
+        if (fp?.array) {
+          for (let i = 0; i < fp.count; i++) {
+            fp.array[i * 3 + 1] += 0.02;
+            if (fp.array[i * 3 + 1] > 2) {
+              fp.array[i * 3] = (Math.random() - 0.5) * 0.6;
+              fp.array[i * 3 + 1] = 0.3;
+              fp.array[i * 3 + 2] = (Math.random() - 0.5) * 0.6;
+            }
           }
+          fp.needsUpdate = true;
         }
-        fp.needsUpdate = true;
       }
     });
     // Storage carriers: small robots walk depot <-> campfire
@@ -3104,18 +3248,20 @@ function initWorld(
         carrier.mixer.update(dt);
       });
     }
-    const sceneUd = scene.userData as { particles?: { geometry: { attributes: { position: { count: number; array: Float32Array; needsUpdate?: boolean } } }; material: { opacity?: number } }; pVel?: { x: number; y: number; z: number }[] };
+    const sceneUd = scene.userData as { particles?: { geometry: { attributes: { position: { count: number; array: Float32Array | null; needsUpdate?: boolean } } }; material: { opacity?: number } }; pVel?: { x: number; y: number; z: number }[] };
     if (sceneUd.particles && sceneUd.pVel) {
       const pp = sceneUd.particles.geometry.attributes.position;
-      for (let i = 0; i < sceneUd.pVel.length; i++) {
-        pp.array[i * 3] += sceneUd.pVel[i].x;
-        pp.array[i * 3 + 1] += sceneUd.pVel[i].y + Math.sin(now * 0.001 + i) * 0.002;
-        pp.array[i * 3 + 2] += sceneUd.pVel[i].z;
-        if (pp.array[i * 3 + 1] > 9 || pp.array[i * 3 + 1] < 1) sceneUd.pVel[i].y *= -1;
-        if (pp.array[i * 3] > WORLD_SIZE * 0.45 || pp.array[i * 3] < -WORLD_SIZE * 0.45) sceneUd.pVel[i].x *= -1;
-        if (pp.array[i * 3 + 2] > WORLD_SIZE * 0.45 || pp.array[i * 3 + 2] < -WORLD_SIZE * 0.45) sceneUd.pVel[i].z *= -1;
+      if (pp?.array) {
+        for (let i = 0; i < sceneUd.pVel.length; i++) {
+          pp.array[i * 3] += sceneUd.pVel[i].x;
+          pp.array[i * 3 + 1] += sceneUd.pVel[i].y + Math.sin(now * 0.001 + i) * 0.002;
+          pp.array[i * 3 + 2] += sceneUd.pVel[i].z;
+          if (pp.array[i * 3 + 1] > 9 || pp.array[i * 3 + 1] < 1) sceneUd.pVel[i].y *= -1;
+          if (pp.array[i * 3] > WORLD_SIZE * 0.42 || pp.array[i * 3] < -WORLD_SIZE * 0.42) sceneUd.pVel[i].x *= -1;
+          if (pp.array[i * 3 + 2] > WORLD_SIZE * 0.42 || pp.array[i * 3 + 2] < -WORLD_SIZE * 0.42) sceneUd.pVel[i].z *= -1;
+        }
+        pp.needsUpdate = true;
       }
-      pp.needsUpdate = true;
       sceneUd.particles.material.opacity = 0.5 + Math.sin(now * 0.002) * 0.25;
     }
     if (water && water.geometry?.attributes?.position) {
@@ -3161,7 +3307,8 @@ function initWorld(
       firePos[i * 3 + 1] = furnaceTopY + t * (2.5 + fireSeed[i] * 1.5);
       firePos[i * 3 + 2] = FURNACE_POS.z + Math.sin(angle) * radius;
     }
-    fireGeo.attributes.position.needsUpdate = true;
+    const firePosAttr = fireGeo.attributes.position;
+    if (firePosAttr) firePosAttr.needsUpdate = true;
     // Ember color shifts orange → yellow → fade
     const emberHeat = 0.5 + Math.sin(now * 0.008) * 0.3;
     fireMat.color.setRGB(1, 0.35 + emberHeat * 0.5, 0.02);
@@ -3213,9 +3360,13 @@ function initWorld(
     filGlowWide.intensity = 1.2 + Math.sin(now * 0.002 + 1) * 0.4;
     filGlowWide.position.y = ty + filHoverBaseY + Math.sin(now * 0.002) * 0.5 - 1;
 
-    // 3D World Status card: slow spin + gentle hover
+    // Filecoin Onchain Cloud card: slow spin + gentle hover + glow pulse
     statusCardGroup.rotation.y += dt * 0.6;
     statusCardGroup.position.y = ty + statusCardBaseY + Math.sin(now * 0.0015 + 1) * 0.35;
+    const cardPulse = 0.9 + Math.sin(now * 0.004) * 0.4;
+    statusCardMat.emissiveIntensity = 0.5 + cardPulse * 0.4;
+    cardGlowCore.intensity = 3.5 + Math.sin(now * 0.003) * 1.2;
+    cardGlowWide.intensity = 2 + Math.sin(now * 0.002 + 0.5) * 0.8;
 
     // Update status card & economy board textures periodically
     if (Math.floor(now / 2000) !== Math.floor((now - dt * 1000) / 2000)) {
