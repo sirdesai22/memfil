@@ -7,7 +7,6 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { Info } from "lucide-react";
 import {
@@ -136,7 +135,6 @@ export function AetheriaWorld({
   const [showControlsModal, setShowControlsModal] = useState(false);
   const { writeContract: regWriteContract, isPending: regIsWriting, error: regWriteError } = useWriteContract();
   const { isLoading: regIsConfirming, isSuccess: regIsConfirmed } = useWaitForTransactionReceipt({ hash: regTxHash });
-  const router = useRouter();
 
   const regNetworkConfig = NETWORKS[regNetwork];
 
@@ -343,7 +341,7 @@ export function AetheriaWorld({
       })
       .then(({ THREE, gltf, castleGltf, filecoinGltf, furnaceGltf }) => {
         if (cancelled) return;
-        initWorld(THREE, containerRef.current!, dataRef, setSelectedAgentId, gltf as { scene: any; animations: any[] }, castleGltf as { scene: any }, filecoinGltf as { scene: any }, furnaceGltf as { scene: any }, () => router.push("/marketplace"), () => setShowRegister(true));
+        initWorld(THREE, containerRef.current!, dataRef, setSelectedAgentId, gltf as { scene: any; animations: any[] }, castleGltf as { scene: any }, filecoinGltf as { scene: any }, furnaceGltf as { scene: any }, () => {}, () => setShowRegister(true));
         setLoading(false);
         rafId = requestAnimationFrame(function loop() {
           if (cancelled) return;
@@ -2109,12 +2107,12 @@ function initWorld(
   filGlowWide.position.set(STORAGE_POS.x, ty + filHoverBaseY - 1, STORAGE_POS.z);
   scene.add(filGlowWide);
 
-  // ── 3D World Status card spinning above the castle ──
-  const STATUS_CARD_W = 4.5;
-  const STATUS_CARD_H = 2.6;
+  // ── Filecoin Onchain Cloud card — blue glowing card at top ──
+  const STATUS_CARD_W = 5;
+  const STATUS_CARD_H = 2.4;
   const statusCardCanvas = document.createElement("canvas");
-  statusCardCanvas.width = 768;
-  statusCardCanvas.height = 438;
+  statusCardCanvas.width = 800;
+  statusCardCanvas.height = 384;
 
   function renderStatusCard() {
     const ctx = statusCardCanvas.getContext("2d")!;
@@ -2122,10 +2120,20 @@ function initWorld(
     const h = statusCardCanvas.height;
     const d = dataRef.current;
 
-    // Background
+    const glow = (color: string, blur: number) => {
+      ctx.shadowColor = color;
+      ctx.shadowBlur = blur;
+    };
+    const noGlow = () => {
+      ctx.shadowColor = "transparent";
+      ctx.shadowBlur = 0;
+    };
+
+    // Background — dark blue gradient
     const grad = ctx.createLinearGradient(0, 0, w, h);
-    grad.addColorStop(0, "rgba(6,4,1,0.96)");
-    grad.addColorStop(1, "rgba(16,10,2,0.95)");
+    grad.addColorStop(0, "rgba(2,8,24,0.97)");
+    grad.addColorStop(0.5, "rgba(4,16,48,0.95)");
+    grad.addColorStop(1, "rgba(2,12,28,0.96)");
     ctx.fillStyle = grad;
     ctx.beginPath();
     const r = 12;
@@ -2140,16 +2148,18 @@ function initWorld(
     ctx.quadraticCurveTo(0, 0, r, 0);
     ctx.fill();
 
-    // Border
-    ctx.strokeStyle = "rgba(180,140,40,0.55)";
-    ctx.lineWidth = 5;
+    // Outer glow border
+    ctx.strokeStyle = "rgba(0,144,255,0.7)";
+    ctx.lineWidth = 6;
+    glow("rgba(0,144,255,0.95)", 30);
     ctx.stroke();
+    noGlow();
 
     // Inner glow border
-    ctx.strokeStyle = "rgba(245,217,106,0.15)";
+    ctx.strokeStyle = "rgba(80,180,255,0.5)";
     ctx.lineWidth = 2;
     ctx.beginPath();
-    const m = 6;
+    const m = 8;
     ctx.moveTo(r + m, m);
     ctx.lineTo(w - r - m, m);
     ctx.quadraticCurveTo(w - m, m, w - m, r + m);
@@ -2159,60 +2169,40 @@ function initWorld(
     ctx.quadraticCurveTo(m, h - m, m, h - r - m);
     ctx.lineTo(m, r + m);
     ctx.quadraticCurveTo(m, m, r + m, m);
+    glow("rgba(0,144,255,0.9)", 18);
     ctx.stroke();
+    noGlow();
 
-    // Header line
-    ctx.fillStyle = "rgba(90,74,42,0.5)";
-    ctx.fillRect(20, 93, w - 40, 1);
-
-    // Header text
-    ctx.font = "bold 39px Cinzel, serif";
-    ctx.fillStyle = "rgba(245,217,106,0.7)";
     ctx.textAlign = "center";
-    ctx.fillText("WORLD STATUS", w / 2, 66);
 
-    // Divider between columns
-    ctx.fillStyle = "rgba(90,74,42,0.5)";
-    ctx.fillRect(w / 2, 108, 1, 252);
+    // Title — Filecoin Onchain Cloud
+    ctx.font = "bold 42px MedievalSharp";
+    ctx.fillStyle = "#60b8ff";
+    glow("rgba(0,144,255,0.95)", 40);
+    ctx.fillText("Filecoin Onchain Cloud", w / 2, 68);
+    noGlow();
 
-    // Left column — AGENTS
-    ctx.font = "bold 32px Cinzel, serif";
-    ctx.fillStyle = "#a89060";
-    ctx.fillText("AGENTS", w / 4, 144);
+    // Storage & Revenue
+    ctx.font = "bold 30px MedievalSharp";
+    ctx.fillStyle = "#a0d8ff";
+    glow("rgba(0,144,255,0.9)", 28);
+    ctx.fillText(
+      `Storage: ${formatTFil(d.summary.totalStorageCostWei)} tFIL · Revenue: $${formatUsd(d.summary.totalRevenueUsdCents)}`,
+      w / 2,
+      120
+    );
+    noGlow();
 
-    ctx.font = "bold 102px MedievalSharp, cursive";
-    ctx.fillStyle = "#f5d96a";
-    ctx.shadowColor = "rgba(245,217,106,0.5)";
-    ctx.shadowBlur = 15;
-    ctx.fillText(String(d.agentRows.length), w / 4, 252);
-    ctx.shadowBlur = 0;
-
-    // Agent status dots
-    const dotY = 315;
-    ctx.font = "bold 33px sans-serif";
-    ctx.fillStyle = "#10b981";
-    ctx.fillText(`● ${d.summary.activeAgents}`, w / 4 - 87, dotY);
-    ctx.fillStyle = "#f59e0b";
-    ctx.fillText(`● ${d.summary.atRiskAgents}`, w / 4, dotY);
-    ctx.fillStyle = "#6b7280";
-    ctx.fillText(`● ${d.summary.windDownCount}`, w / 4 + 87, dotY);
-
-    // Right column — STORAGE
-    ctx.font = "bold 32px Cinzel, serif";
-    ctx.fillStyle = "#a89060";
-    ctx.textAlign = "center";
-    ctx.fillText("STORAGE", (w * 3) / 4, 144);
-
-    ctx.font = "bold 72px MedievalSharp, cursive";
-    ctx.fillStyle = "#e8a030";
-    ctx.shadowColor = "rgba(232,160,48,0.4)";
-    ctx.shadowBlur = 12;
-    ctx.fillText(formatTFil(d.summary.totalStorageCostWei), (w * 3) / 4, 237);
-    ctx.shadowBlur = 0;
-
-    ctx.font = "bold 30px Cinzel, serif";
-    ctx.fillStyle = "#a89060";
-    ctx.fillText("tFIL", (w * 3) / 4, 294);
+    // Status row
+    ctx.font = "bold 24px MedievalSharp";
+    ctx.fillStyle = "#70a8d0";
+    glow("rgba(0,144,255,0.6)", 12);
+    ctx.fillText(
+      `Healthy: ${d.summary.activeAgents} · At-Risk: ${d.summary.atRiskAgents} · Wound: ${d.summary.windDownCount}`,
+      w / 2,
+      168
+    );
+    noGlow();
   }
 
   renderStatusCard();
@@ -2222,11 +2212,12 @@ function initWorld(
   const statusCardMat = new THREE.MeshStandardMaterial({
     map: statusCardTex,
     transparent: true,
-    roughness: 0.3,
-    metalness: 0.15,
+    roughness: 0.2,
+    metalness: 0.1,
     side: THREE.DoubleSide,
-    emissive: 0x332200,
-    emissiveIntensity: 0.3,
+    emissive: 0x0066cc,
+    emissiveIntensity: 0.6,
+    toneMapped: false,
   });
   const statusCardGeo = new THREE.PlaneGeometry(STATUS_CARD_W, STATUS_CARD_H);
   const statusCardMesh = new THREE.Mesh(statusCardGeo, statusCardMat);
@@ -2234,15 +2225,18 @@ function initWorld(
   const statusCardGroup = new THREE.Group();
   statusCardGroup.add(statusCardMesh);
 
-  // Position above filecoin model
-  const statusCardBaseY = TARGET_CASTLE_HEIGHT + 3;
+  // Position at top — above castle and filecoin model
+  const statusCardBaseY = TARGET_CASTLE_HEIGHT + 6;
   statusCardGroup.position.set(STORAGE_POS.x, ty + statusCardBaseY, STORAGE_POS.z);
   scene.add(statusCardGroup);
 
-  // Point light to illuminate the card
-  const cardLight = new THREE.PointLight(0xf5d96a, 1.5, 8);
-  cardLight.position.set(0, 0, 1.5);
-  statusCardGroup.add(cardLight);
+  // Strong blue glow lights around the card
+  const cardGlowCore = new THREE.PointLight(0x0088ff, 4, 12);
+  cardGlowCore.position.set(0, 0, 2);
+  statusCardGroup.add(cardGlowCore);
+  const cardGlowWide = new THREE.PointLight(0x0044cc, 2.5, 18);
+  cardGlowWide.position.set(0, 0, 4);
+  statusCardGroup.add(cardGlowWide);
 
   // ── 3D Economy Board — stock-market style digital display ──────────────────
   const ECON_BOARD_POS = { x: -10, z: -10 };
@@ -3366,9 +3360,13 @@ function initWorld(
     filGlowWide.intensity = 1.2 + Math.sin(now * 0.002 + 1) * 0.4;
     filGlowWide.position.y = ty + filHoverBaseY + Math.sin(now * 0.002) * 0.5 - 1;
 
-    // 3D World Status card: slow spin + gentle hover
+    // Filecoin Onchain Cloud card: slow spin + gentle hover + glow pulse
     statusCardGroup.rotation.y += dt * 0.6;
     statusCardGroup.position.y = ty + statusCardBaseY + Math.sin(now * 0.0015 + 1) * 0.35;
+    const cardPulse = 0.9 + Math.sin(now * 0.004) * 0.4;
+    statusCardMat.emissiveIntensity = 0.5 + cardPulse * 0.4;
+    cardGlowCore.intensity = 3.5 + Math.sin(now * 0.003) * 1.2;
+    cardGlowWide.intensity = 2 + Math.sin(now * 0.002 + 0.5) * 0.8;
 
     // Update status card & economy board textures periodically
     if (Math.floor(now / 2000) !== Math.floor((now - dt * 1000) / 2000)) {
