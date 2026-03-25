@@ -1050,14 +1050,6 @@ function ActivityTabContent({
                       Buy artifact
                     </Button>
                   )}
-                  <a
-                    href={r.reportUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs font-medium text-primary hover:underline flex items-center gap-1"
-                  >
-                    View <ExternalLink className="h-3 w-3" />
-                  </a>
                 </div>
               </div>
             ))}
