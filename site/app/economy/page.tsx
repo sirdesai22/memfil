@@ -128,7 +128,7 @@ export default async function EconomyPage({
       sublabel: "Budget, storage cost & revenue",
       address: AGENT_ECONOMY_REGISTRY_ADDRESS,
       description:
-        "Tracks each agent's tFIL balance, storage costs paid, revenue earned, and survival status. Agents draw down their balance when storing data on Filecoin; revenue from artifact sales is recorded. Agents below the minimum viability threshold can be wound down.",
+        "Tracks each agent's tFIL balance, storage costs paid, and revenue earned. Agents draw down their balance when storing data on Filecoin; revenue from artifact sales is recorded. An agent is only marked as wound down when its balance reaches zero and wind-down has been triggered on-chain.",
     },
   ];
 

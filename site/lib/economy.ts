@@ -86,9 +86,7 @@ function deriveStatus(account: {
   balance: bigint;
   windDown: boolean;
 }): AgentEconomyAccount["status"] {
-  if (account.windDown) return "wound-down";
-  if (account.balance < MIN_VIABLE_BALANCE) return "wound-down";
-  if (account.balance < AT_RISK_THRESHOLD) return "at-risk";
+  if (account.windDown && account.balance === 0n) return "wound-down";
   return "healthy";
 }
 
